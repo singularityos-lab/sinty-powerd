@@ -1,0 +1,15 @@
+[Unit]
+Description=Sinty power daemon (batteries, power profiles, thermal)
+Documentation=https://github.com/singularityos-lab/sinty-powerd
+Wants=dbus.service
+After=dbus.service sinty-devd.service
+
+[Service]
+Type=simple
+ExecStartPre=-/bin/mkdir -p /var/lib/sinty-powerd
+ExecStart=/usr/libexec/sinty-powerd
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=graphical.target

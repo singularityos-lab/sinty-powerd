@@ -1,0 +1,6 @@
+/sinty-powerd
+*.test
+*.out
+
+.DS_Store
+*.swp
