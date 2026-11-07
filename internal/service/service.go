@@ -18,6 +18,7 @@ import (
 	"github.com/godbus/dbus/v5/introspect"
 	"github.com/godbus/dbus/v5/prop"
 
+	"github.com/singularityos-lab/sinty-powerd/internal/gpumux"
 	"github.com/singularityos-lab/sinty-powerd/internal/profiles"
 	"github.com/singularityos-lab/sinty-powerd/internal/supply"
 	"github.com/singularityos-lab/sinty-powerd/internal/thermal"
@@ -76,6 +77,8 @@ type Service struct {
 	nextCookie uint32
 	degraded   string
 	guard      *thermal.Guard
+	mux        *gpumux.Mux
+	power      *prop.Properties
 	history    map[string]*history
 	threshold  map[string]bool
 	lidPresent bool
@@ -100,6 +103,7 @@ func New(cfg Config) (*Service, error) {
 		devices:   map[string]*exported{},
 		backend:   profiles.Detect(cfg.Root),
 		guard:     thermal.Detect(cfg.Root),
+		mux:       gpumux.Detect(cfg.Root),
 		history:   map[string]*history{},
 		threshold: map[string]bool{},
 		chosen:    profiles.Balanced,
@@ -111,7 +115,7 @@ func New(cfg Config) (*Service, error) {
 		conn.Close()
 		return nil, err
 	}
-	for _, name := range []string{upowerName, ppdEndpoints[0].name, ppdEndpoints[1].name} {
+	for _, name := range []string{upowerName, ppdEndpoints[0].name, ppdEndpoints[1].name, powerName} {
 		reply, err := conn.RequestName(name, dbus.NameFlagReplaceExisting|dbus.NameFlagDoNotQueue)
 		if err != nil {
 			conn.Close()
@@ -193,7 +197,7 @@ func (s *Service) export() error {
 			return err
 		}
 	}
-	return nil
+	return s.exportPower()
 }
 
 func (s *Service) introspect(path dbus.ObjectPath, iface string, obj interface{}, props *prop.Properties) error {

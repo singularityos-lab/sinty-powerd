@@ -30,15 +30,25 @@ desktop find the same names, objects and properties on the system bus.
   `net.hadess.PowerProfiles`: power-saver, balanced and performance applied to
   the ACPI platform profile and the energy performance preference of the CPU
   driver, `HoldProfile` and `ReleaseProfile` with holds dropped when their
-  owner leaves the bus, and the chosen profile remembered across boots.
+  owner leaves the bus, and the chosen profile remembered across boots. On
+  battery, balanced uses the `balance_power` preference unless
+  `BatteryAware` is turned off, and below the low battery level a
+  power-saver hold with the reason `Battery low` is taken until the computer
+  is plugged in or the battery is back 5 points above that level.
 - **Thermal guard.** When the processor package approaches its throttling
   temperature, its sustained RAPL power limit is lowered step by step, and
   raised again once it has cooled. While it is lowered, the power profiles
   report `PerformanceDegraded` as `high-operating-temperature`.
+- **GPU switch** on `dev.sinty.Power1`: on laptops whose firmware can wire
+  the panel to the dedicated GPU (ASUS `gpu_mux_mode`), `GpuMux` is the mode
+  the firmware will boot with (`hybrid` or `dedicated`), `GpuMuxBooted` the
+  mode it booted with, and `SetGpuMux` changes it for the next boot. Choosing
+  `dedicated` is refused while the dedicated GPU has no driver, since the
+  panel would stay dark. On other computers `GpuMux` is empty.
 - Power supply changes arrive as kernel uevents; the lid switch is read from
   its input device.
 
-Changing the profile or the charge threshold is allowed to root and to
+Changing the profile, the charge threshold or the GPU mode is allowed to root and to
 regular users.
 
 ## Usage
