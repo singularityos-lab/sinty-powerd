@@ -45,6 +45,12 @@ desktop find the same names, objects and properties on the system bus.
   mode it booted with, and `SetGpuMux` changes it for the next boot. Choosing
   `dedicated` is refused while the dedicated GPU has no driver, since the
   panel would stay dark. On other computers `GpuMux` is empty.
+- **Reasons** on `dev.sinty.Power1`: what currently holds the computer
+  back, as `[id, a, b]` entries. `thermal` gives the temperature in degrees
+  and the share of power left, `hold-power-saver` and `hold-performance` the
+  application and reason of a hold (the low battery hold comes from
+  `sinty-powerd` itself), and `battery` means balanced prefers efficiency on
+  battery.
 - Power supply changes arrive as kernel uevents; the lid switch is read from
   its input device.
 
