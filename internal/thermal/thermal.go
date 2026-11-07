@@ -21,6 +21,7 @@ type Guard struct {
 	floor      uint64
 	target     int64
 	hysteresis int64
+	last       int64
 }
 
 func readInt(path string) (int64, bool) {
@@ -92,6 +93,7 @@ func (g *Guard) Step() bool {
 	if !ok {
 		return g.current < g.original
 	}
+	g.last = t
 	next := g.current
 	switch {
 	case t >= g.target && g.current > g.floor:
@@ -110,4 +112,13 @@ func (g *Guard) Restore() {
 	if g.current != g.original && os.WriteFile(g.limit, []byte(strconv.FormatUint(g.original, 10)), 0) == nil {
 		g.current = g.original
 	}
+}
+
+func (g *Guard) Temperature() int64 { return g.last }
+
+func (g *Guard) Share() int {
+	if g.original == 0 {
+		return 100
+	}
+	return int(g.current * 100 / g.original)
 }

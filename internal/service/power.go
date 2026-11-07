@@ -1,8 +1,13 @@
 package service
 
 import (
+	"slices"
+	"strconv"
+
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/prop"
+
+	"github.com/singularityos-lab/sinty-powerd/internal/profiles"
 )
 
 const (
@@ -25,6 +30,7 @@ func (s *Service) exportPower() error {
 	props, err := prop.Export(s.conn, powerPath, prop.Map{powerIface: {
 		"GpuMux":       {Value: current, Emit: prop.EmitTrue},
 		"GpuMuxBooted": {Value: booted, Emit: prop.EmitFalse},
+		"Reasons":      {Value: [][]string{}, Emit: prop.EmitTrue},
 	}})
 	if err != nil {
 		return err
@@ -48,4 +54,31 @@ func (o *powerObject) SetGpuMux(sender dbus.Sender, mode string) *dbus.Error {
 	}
 	s.power.SetMust(powerIface, "GpuMux", s.mux.Current())
 	return nil
+}
+
+func (s *Service) reasons() [][]string {
+	out := [][]string{}
+	if s.guard != nil && s.degraded != "" {
+		out = append(out, []string{"thermal", strconv.FormatInt(s.guard.Temperature()/1000, 10), strconv.Itoa(s.guard.Share())})
+	}
+	for _, h := range s.holds {
+		out = append(out, []string{"hold-" + h.profile, h.app, h.reason})
+	}
+	if s.onBattery && s.batteryAware && s.effective() == profiles.Balanced {
+		out = append(out, []string{"battery", "", ""})
+	}
+	return out
+}
+
+func (s *Service) publishReasons() {
+	if s.power == nil {
+		return
+	}
+	next := s.reasons()
+	if cur, err := s.power.Get(powerIface, "Reasons"); err == nil {
+		if old, ok := cur.Value().([][]string); ok && slices.EqualFunc(old, next, slices.Equal[[]string]) {
+			return
+		}
+	}
+	s.power.SetMust(powerIface, "Reasons", next)
 }

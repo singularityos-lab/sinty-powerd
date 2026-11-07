@@ -100,6 +100,7 @@ func (s *Service) apply() {
 	}
 	s.setPPD("ActiveProfile", p)
 	s.setPPD("ActiveProfileHolds", s.holdList())
+	s.publishReasons()
 }
 
 // Start applies the remembered profile.
@@ -227,6 +228,7 @@ func (s *Service) ThermalStep() {
 		s.degraded = degraded
 		s.setPPD("PerformanceDegraded", degraded)
 	}
+	s.publishReasons()
 }
 
 // Stop gives the processor its full power back.
