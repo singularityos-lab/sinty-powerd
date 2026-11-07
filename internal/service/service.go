@@ -80,6 +80,11 @@ type Service struct {
 	threshold  map[string]bool
 	lidPresent bool
 	lidClosed  bool
+
+	onBattery    bool
+	batteryAware bool
+	lowHeld      bool
+	lowCookie    uint32
 }
 
 // New connects to the system bus and publishes UPower and the power
@@ -98,6 +103,8 @@ func New(cfg Config) (*Service, error) {
 		history:   map[string]*history{},
 		threshold: map[string]bool{},
 		chosen:    profiles.Balanced,
+
+		batteryAware: true,
 	}
 	s.loadState()
 	if err := s.export(); err != nil {
@@ -125,6 +132,9 @@ func (s *Service) loadState() {
 		if p := string(data); s.backend.Supports(p) {
 			s.chosen = p
 		}
+	}
+	if data, err := os.ReadFile(s.statePath("battery-aware")); err == nil {
+		s.batteryAware = string(data) != "false"
 	}
 	if data, err := os.ReadFile(s.statePath("charge-threshold.json")); err == nil {
 		json.Unmarshal(data, &s.threshold)
@@ -288,8 +298,11 @@ func (s *Service) Refresh() {
 			s.conn.Emit(upowerPath, upowerName+".DeviceRemoved", devicePath(id))
 		}
 	}
-	update(s.display, supply.Display(devs, s.cfg.Policy))
-	s.setManager("OnBattery", supply.OnBattery(devs))
+	display := supply.Display(devs, s.cfg.Policy)
+	update(s.display, display)
+	onBattery := supply.OnBattery(devs)
+	s.setManager("OnBattery", onBattery)
+	s.govern(onBattery, display.Percentage)
 }
 
 func (s *Service) setManager(name string, v interface{}) {

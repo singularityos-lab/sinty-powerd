@@ -44,7 +44,7 @@ func TestProfilesMatchPowerProfilesDaemon(t *testing.T) {
 func TestApplyWritesEveryKnob(t *testing.T) {
 	root := machine(t)
 	b := Detect(root)
-	if err := b.Apply(PowerSaver); err != nil {
+	if err := b.Apply(PowerSaver, false); err != nil {
 		t.Fatal(err)
 	}
 	if got := read(filepath.Join(root, "sys/firmware/acpi/platform_profile")); got != "low-power" {
@@ -55,7 +55,7 @@ func TestApplyWritesEveryKnob(t *testing.T) {
 			t.Errorf("%s epp %q", p, got)
 		}
 	}
-	b.Apply(Performance)
+	b.Apply(Performance, false)
 	if got := read(filepath.Join(root, "sys/firmware/acpi/platform_profile")); got != "performance" {
 		t.Errorf("platform profile %q", got)
 	}
@@ -67,7 +67,30 @@ func TestNoDriversStillOffersTwoProfiles(t *testing.T) {
 	if len(got) != 2 || got[0].Driver != "placeholder" || b.Supports(Performance) {
 		t.Errorf("profiles without drivers: %+v", got)
 	}
-	if err := b.Apply(Performance); err == nil {
+	if err := b.Apply(Performance, false); err == nil {
 		t.Error("performance must be refused without a driver")
+	}
+}
+
+func TestBalancedOnBatterySavesPower(t *testing.T) {
+	root := machine(t)
+	b := Detect(root)
+	epp := filepath.Join(root, "sys/devices/system/cpu/cpufreq/policy0/energy_performance_preference")
+	if err := b.Apply(Balanced, true); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(epp); got != "balance_power" {
+		t.Errorf("balanced on battery epp %q", got)
+	}
+	if got := read(filepath.Join(root, "sys/firmware/acpi/platform_profile")); got != "balanced" {
+		t.Errorf("balanced on battery platform profile %q", got)
+	}
+	b.Apply(Balanced, false)
+	if got := read(epp); got != "balance_performance" {
+		t.Errorf("balanced on mains epp %q", got)
+	}
+	b.Apply(Performance, true)
+	if got := read(epp); got != "performance" {
+		t.Errorf("performance on battery epp %q", got)
 	}
 }

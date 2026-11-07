@@ -72,13 +72,16 @@ func (b *Backend) platformChoice(profile string) string {
 	return ""
 }
 
-func (b *Backend) eppChoice(profile string) string {
+func (b *Backend) eppChoice(profile string, onBattery bool) string {
 	var want []string
 	switch profile {
 	case PowerSaver:
 		want = []string{"power", "balance_power"}
 	case Balanced:
 		want = []string{"balance_performance", "default"}
+		if onBattery {
+			want = []string{"balance_power", "balance_performance", "default"}
+		}
 	case Performance:
 		want = []string{"performance"}
 	}
@@ -108,7 +111,7 @@ func (b *Backend) Profiles() []Profile {
 		if b.platformChoice(name) != "" {
 			p.PlatformDriver = "platform_profile"
 		}
-		if len(b.eppFiles) > 0 && b.eppChoice(name) != "" {
+		if len(b.eppFiles) > 0 && b.eppChoice(name, false) != "" {
 			p.CPUDriver = b.cpuDriver
 		}
 		switch {
@@ -140,7 +143,7 @@ func (b *Backend) Supports(profile string) bool {
 }
 
 // Apply writes profile to every knob that has a setting for it.
-func (b *Backend) Apply(profile string) error {
+func (b *Backend) Apply(profile string, onBattery bool) error {
 	if !b.Supports(profile) {
 		return errors.New("profile not available: " + profile)
 	}
@@ -150,7 +153,7 @@ func (b *Backend) Apply(profile string) error {
 			errs = append(errs, err)
 		}
 	}
-	if c := b.eppChoice(profile); c != "" {
+	if c := b.eppChoice(profile, onBattery); c != "" {
 		for _, f := range b.eppFiles {
 			if err := os.WriteFile(f, []byte(c), 0); err != nil {
 				errs = append(errs, err)

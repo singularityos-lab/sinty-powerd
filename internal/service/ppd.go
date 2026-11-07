@@ -3,11 +3,13 @@ package service
 import (
 	"log"
 	"slices"
+	"strconv"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/prop"
 
 	"github.com/singularityos-lab/sinty-powerd/internal/profiles"
+	"github.com/singularityos-lab/sinty-powerd/internal/supply"
 )
 
 const ppdVersion = "0.30"
@@ -49,7 +51,7 @@ func (s *Service) ppdProps() map[string]*prop.Prop {
 		"ActionsInfo":          {Value: []map[string]dbus.Variant{}, Emit: prop.EmitTrue},
 		"ActiveProfileHolds":   {Value: s.holdList(), Emit: prop.EmitTrue},
 		"Version":              {Value: ppdVersion, Emit: prop.EmitFalse},
-		"BatteryAware":         {Value: true, Writable: true, Emit: prop.EmitTrue},
+		"BatteryAware":         {Value: s.batteryAware, Writable: true, Emit: prop.EmitTrue, Callback: s.setBatteryAware},
 	}
 }
 
@@ -93,7 +95,7 @@ func equalValue(a, b interface{}) bool {
 // apply writes the effective profile to the hardware and publishes it.
 func (s *Service) apply() {
 	p := s.effective()
-	if err := s.backend.Apply(p); err != nil {
+	if err := s.backend.Apply(p, s.onBattery && s.batteryAware); err != nil {
 		log.Printf("profile %s: %v", p, err)
 	}
 	s.setPPD("ActiveProfile", p)
@@ -232,4 +234,55 @@ func (s *Service) Stop() {
 	if s.guard != nil {
 		s.guard.Restore()
 	}
+}
+
+const lowBatteryReason = "Battery low"
+
+func batteryState(policy supply.Policy, onBattery bool, percentage float64) (low, recovered bool) {
+	low = onBattery && percentage > 0 && percentage <= policy.PercentageLow
+	recovered = !onBattery || percentage >= policy.PercentageLow+5
+	return low, recovered
+}
+
+func (s *Service) govern(onBattery bool, percentage float64) {
+	changed := onBattery != s.onBattery
+	s.onBattery = onBattery
+	low, recovered := batteryState(s.cfg.Policy, onBattery, percentage)
+	switch {
+	case low && !s.lowHeld:
+		s.lowHeld = true
+		if s.backend.Supports(profiles.PowerSaver) {
+			s.nextCookie++
+			s.lowCookie = s.nextCookie
+			s.holds = append(s.holds, hold{cookie: s.lowCookie, profile: profiles.PowerSaver, reason: lowBatteryReason, app: "sinty-powerd"})
+			s.apply()
+			return
+		}
+	case recovered && s.lowHeld:
+		s.lowHeld = false
+		cookie := s.lowCookie
+		s.lowCookie = 0
+		if i := slices.IndexFunc(s.holds, func(h hold) bool { return h.cookie == cookie }); i >= 0 {
+			s.release(i)
+			return
+		}
+	}
+	if changed {
+		s.apply()
+	}
+}
+
+func (s *Service) setBatteryAware(c *prop.Change) *dbus.Error {
+	aware, ok := c.Value.(bool)
+	if !ok {
+		return dbus.MakeFailedError(errInvalidProfile("battery awareness"))
+	}
+	go func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.batteryAware = aware
+		writeState(s.statePath("battery-aware"), []byte(strconv.FormatBool(aware)))
+		s.apply()
+	}()
+	return nil
 }
