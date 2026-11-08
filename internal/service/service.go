@@ -18,6 +18,7 @@ import (
 	"github.com/godbus/dbus/v5/introspect"
 	"github.com/godbus/dbus/v5/prop"
 
+	"github.com/singularityos-lab/sinty-powerd/internal/energy"
 	"github.com/singularityos-lab/sinty-powerd/internal/gpumux"
 	"github.com/singularityos-lab/sinty-powerd/internal/profiles"
 	"github.com/singularityos-lab/sinty-powerd/internal/supply"
@@ -78,6 +79,7 @@ type Service struct {
 	degraded   string
 	guard      *thermal.Guard
 	mux        *gpumux.Mux
+	meter      *energy.Meter
 	power      *prop.Properties
 	history    map[string]*history
 	threshold  map[string]bool
@@ -106,6 +108,7 @@ func New(cfg Config) (*Service, error) {
 		backend:   profiles.Detect(cfg.Root),
 		guard:     thermal.Detect(cfg.Root),
 		mux:       gpumux.Detect(cfg.Root),
+		meter:     energy.Detect(cfg.Root),
 		history:   map[string]*history{},
 		threshold: map[string]bool{},
 		chosen:    profiles.Balanced,
@@ -309,6 +312,7 @@ func (s *Service) Refresh() {
 	onBattery := supply.OnBattery(devs)
 	s.setManager("OnBattery", onBattery)
 	s.govern(onBattery, display.Percentage)
+	s.publishEnergy(now)
 }
 
 func (s *Service) setManager(name string, v interface{}) {

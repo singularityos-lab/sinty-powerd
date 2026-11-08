@@ -51,6 +51,11 @@ desktop find the same names, objects and properties on the system bus.
   application and reason of a hold (the low battery hold comes from
   `sinty-powerd` itself), and `battery` means balanced prefers efficiency on
   battery.
+- **Energy** on `dev.sinty.Power1`: `package-watts`, the power the
+  processor package drew since the previous reading, from its RAPL counter,
+  and `cpu-low-power-idle-seconds` and `system-low-power-idle-seconds`, the
+  time spent in low power idle since boot. Only the values the hardware
+  reports are present.
 - Power supply changes arrive as kernel uevents; the lid switch is read from
   its input device.
 

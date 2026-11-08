@@ -3,6 +3,7 @@ package service
 import (
 	"slices"
 	"strconv"
+	"time"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/prop"
@@ -31,6 +32,7 @@ func (s *Service) exportPower() error {
 		"GpuMux":       {Value: current, Emit: prop.EmitTrue},
 		"GpuMuxBooted": {Value: booted, Emit: prop.EmitFalse},
 		"Reasons":      {Value: [][]string{}, Emit: prop.EmitTrue},
+		"Energy":       {Value: map[string]float64{}, Emit: prop.EmitFalse},
 	}})
 	if err != nil {
 		return err
@@ -54,6 +56,14 @@ func (o *powerObject) SetGpuMux(sender dbus.Sender, mode string) *dbus.Error {
 	}
 	s.power.SetMust(powerIface, "GpuMux", s.mux.Current())
 	return nil
+}
+
+func (s *Service) publishEnergy(now time.Time) {
+	if s.meter == nil || s.power == nil {
+		return
+	}
+	s.meter.Sample(now)
+	s.power.SetMust(powerIface, "Energy", s.meter.Readings())
 }
 
 func (s *Service) reasons() [][]string {
