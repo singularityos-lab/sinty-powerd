@@ -62,9 +62,10 @@ desktop find the same names, objects and properties on the system bus.
   the chassis when not given). Power saver turns the processor boost off. On
   battery, in power saver and while the session is idle, PCI and USB devices
   the kernel keeps always on are allowed to suspend on their own (input and
-  audio USB devices, GPU drivers, `mei_me` and PCIe ports excepted) and the
-  HDA codec powers down when silent; every value changed is put back
-  afterwards. NVIDIA GPUs and their audio function are always allowed to
+  audio USB devices, GPU drivers, `mei_me` and PCIe ports excepted), the
+  HDA codec powers down when silent, dirty pages are written back every 15
+  seconds instead of 5 and the NMI watchdog is off; every value changed is
+  put back afterwards. NVIDIA GPUs and their audio function are always allowed to
   suspend, as the driver documentation asks, so an idle dedicated GPU turns
   off. Phones and headless machines also get a sustained package power
   budget. After a resume, and when a device is plugged in, the settings are

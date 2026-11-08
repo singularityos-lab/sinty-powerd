@@ -36,6 +36,8 @@ func TestApplyAndRestore(t *testing.T) {
 	put(t, root, "sys/bus/usb/devices/1-2/power/control", "on")
 	put(t, root, "sys/bus/usb/devices/1-2/1-2:1.0/bInterfaceClass", "03")
 	put(t, root, "sys/module/snd_hda_intel/parameters/power_save", "0")
+	put(t, root, "proc/sys/vm/dirty_writeback_centisecs", "500")
+	put(t, root, "proc/sys/kernel/nmi_watchdog", "1")
 
 	m := New(root)
 	m.Apply(true, true, false)
@@ -46,6 +48,8 @@ func TestApplyAndRestore(t *testing.T) {
 		"sys/bus/usb/devices/1-1/power/control":          "auto",
 		"sys/bus/usb/devices/1-2/power/control":          "on",
 		"sys/module/snd_hda_intel/parameters/power_save": "1",
+		"proc/sys/vm/dirty_writeback_centisecs":          "1500",
+		"proc/sys/kernel/nmi_watchdog":                   "0",
 	} {
 		if got := get(t, root, path); got != want {
 			t.Errorf("saving: %s = %s, want %s", path, got, want)
@@ -59,6 +63,9 @@ func TestApplyAndRestore(t *testing.T) {
 	if got := get(t, root, "sys/module/snd_hda_intel/parameters/power_save"); got != "1" {
 		t.Errorf("audio saving dropped with runtime PM: %s", got)
 	}
+	if got := get(t, root, "proc/sys/vm/dirty_writeback_centisecs"); got != "500" {
+		t.Errorf("writeback not given back: %s", got)
+	}
 
 	m.Apply(true, false, false)
 	m.Restore()
@@ -67,6 +74,8 @@ func TestApplyAndRestore(t *testing.T) {
 		"sys/bus/pci/devices/0000:00:14.0/power/control": "auto",
 		"sys/bus/usb/devices/1-1/power/control":          "on",
 		"sys/module/snd_hda_intel/parameters/power_save": "0",
+		"proc/sys/vm/dirty_writeback_centisecs":          "500",
+		"proc/sys/kernel/nmi_watchdog":                   "1",
 	} {
 		if got := get(t, root, path); got != want {
 			t.Errorf("restored: %s = %s, want %s", path, got, want)

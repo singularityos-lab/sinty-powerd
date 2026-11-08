@@ -16,6 +16,11 @@ var skipDrivers = []string{"nvidia", "nouveau", "radeon", "amdgpu", "mei_me", "p
 
 const nvidiaVendor = "0x10de"
 
+var savingKnobs = map[string]string{
+	"proc/sys/vm/dirty_writeback_centisecs": "1500",
+	"proc/sys/kernel/nmi_watchdog":          "0",
+}
+
 const (
 	usbHID   = "03"
 	usbAudio = "01"
@@ -154,6 +159,9 @@ func (m *Manager) Apply(runtimePM, audio, wakeOnRadio bool) {
 				m.set(p, "auto")
 			}
 		}
+		for p, v := range savingKnobs {
+			m.set(filepath.Join(m.root, p), v)
+		}
 	}
 	if audio {
 		for _, p := range m.audioKnobs() {
@@ -170,7 +178,7 @@ func (m *Manager) Apply(runtimePM, audio, wakeOnRadio bool) {
 	for path, orig := range m.changed {
 		wanted := audio
 		switch {
-		case strings.HasSuffix(path, "power/control"):
+		case strings.HasSuffix(path, "power/control"), strings.HasPrefix(path, filepath.Join(m.root, "proc/sys")):
 			wanted = runtimePM
 		case strings.HasSuffix(path, "power/wakeup"):
 			wanted = wakeOnRadio
