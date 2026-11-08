@@ -15,13 +15,19 @@ import (
 // Guard watches one temperature and steers one power limit.
 type Guard struct {
 	temp       string
-	limit      string
+	knobs      []knob
 	original   uint64
 	current    uint64
 	floor      uint64
 	target     int64
 	hysteresis int64
 	last       int64
+	kind       string
+}
+
+type knob struct {
+	path     string
+	original uint64
 }
 
 func readInt(path string) (int64, bool) {
@@ -63,9 +69,11 @@ func Detect(root string) *Guard {
 			}
 		}
 	}
-	limit := filepath.Join(root, "sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw")
-	original, ok := readInt(limit)
-	if temp == "" || !ok || original <= 0 {
+	if temp == "" {
+		return nil
+	}
+	knobs, kind := limits(root)
+	if len(knobs) == 0 {
 		return nil
 	}
 	target := int64(95000)
@@ -74,13 +82,68 @@ func Detect(root string) *Guard {
 	}
 	return &Guard{
 		temp:       temp,
-		limit:      limit,
-		original:   uint64(original),
-		current:    uint64(original),
-		floor:      uint64(original) * 4 / 10,
+		knobs:      knobs,
+		kind:       kind,
+		original:   1000,
+		current:    1000,
+		floor:      400,
 		target:     target,
 		hysteresis: 8000,
 	}
+}
+
+func limits(root string) ([]knob, string) {
+	rapl := filepath.Join(root, "sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw")
+	if v, ok := readInt(rapl); ok && v > 0 {
+		return []knob{{rapl, uint64(v)}}, "rapl"
+	}
+	pct := filepath.Join(root, "sys/devices/system/cpu/intel_pstate/max_perf_pct")
+	if v, ok := readInt(pct); ok && v > 0 {
+		return []knob{{pct, uint64(v)}}, "max-perf-pct"
+	}
+	var out []knob
+	files, _ := filepath.Glob(filepath.Join(root, "sys/devices/system/cpu/cpufreq/policy*/scaling_max_freq"))
+	for _, f := range files {
+		if v, ok := readInt(f); ok && v > 0 {
+			out = append(out, knob{f, uint64(v)})
+		}
+	}
+	if len(out) > 0 {
+		return out, "max-freq"
+	}
+	return nil, ""
+}
+
+func (g *Guard) Kind() string { return g.kind }
+
+func (g *Guard) write(share uint64) bool {
+	ok := true
+	for _, k := range g.knobs {
+		v := k.original * share / 1000
+		if os.WriteFile(k.path, []byte(strconv.FormatUint(v, 10)), 0) != nil {
+			ok = false
+		}
+	}
+	return ok
+}
+
+func (g *Guard) SetCeilingWatts(watts float64) {
+	ceiling := uint64(1000)
+	if watts > 0 && g.kind == "rapl" && g.knobs[0].original > 0 {
+		ceiling = min(1000, max(g.floor, uint64(watts*1e6*1000/float64(g.knobs[0].original))))
+	}
+	if ceiling == g.original {
+		return
+	}
+	full := g.current == g.original
+	g.original = ceiling
+	if (full || g.current > ceiling) && g.write(ceiling) {
+		g.current = ceiling
+	}
+}
+
+func (g *Guard) Reapply() {
+	g.write(g.current)
 }
 
 // Target is the temperature, in millidegrees, the guard keeps below.
@@ -101,7 +164,7 @@ func (g *Guard) Step() bool {
 	case t <= g.target-g.hysteresis && g.current < g.original:
 		next = min(g.original, g.current*110/100+1)
 	}
-	if next != g.current && os.WriteFile(g.limit, []byte(strconv.FormatUint(next, 10)), 0) == nil {
+	if next != g.current && g.write(next) {
 		g.current = next
 	}
 	return g.current < g.original
@@ -109,16 +172,14 @@ func (g *Guard) Step() bool {
 
 // Restore gives the processor its full power back.
 func (g *Guard) Restore() {
-	if g.current != g.original && os.WriteFile(g.limit, []byte(strconv.FormatUint(g.original, 10)), 0) == nil {
-		g.current = g.original
+	if g.write(1000) {
+		g.current = 1000
+		g.original = 1000
 	}
 }
 
 func (g *Guard) Temperature() int64 { return g.last }
 
 func (g *Guard) Share() int {
-	if g.original == 0 {
-		return 100
-	}
-	return int(g.current * 100 / g.original)
+	return int(g.current / 10)
 }

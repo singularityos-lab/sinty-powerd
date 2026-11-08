@@ -58,11 +58,61 @@ func TestGuardThrottlesAndRecovers(t *testing.T) {
 	}
 }
 
-func TestNoPowerLimitMeansNoGuard(t *testing.T) {
+func TestNothingToSteerMeansNoGuard(t *testing.T) {
 	root := t.TempDir()
 	put(t, root, "sys/class/thermal/thermal_zone0/type", "x86_pkg_temp")
 	put(t, root, "sys/class/thermal/thermal_zone0/temp", "50000")
 	if Detect(root) != nil {
-		t.Error("a guard without a power limit to steer")
+		t.Error("a guard with nothing to steer")
+	}
+}
+
+func TestFallbackWithoutRAPL(t *testing.T) {
+	root := t.TempDir()
+	put(t, root, "sys/class/thermal/thermal_zone0/type", "x86_pkg_temp")
+	put(t, root, "sys/class/thermal/thermal_zone0/temp", "99000")
+	put(t, root, "sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq", "4800000")
+	put(t, root, "sys/devices/system/cpu/cpufreq/policy1/scaling_max_freq", "3600000")
+	g := Detect(root)
+	if g == nil || g.Kind() != "max-freq" {
+		t.Fatalf("guard %+v", g)
+	}
+	for i := 0; i < 20; i++ {
+		g.Step()
+	}
+	read := func(p string) string {
+		data, _ := os.ReadFile(filepath.Join(root, p))
+		return strings.TrimSpace(string(data))
+	}
+	if read("sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq") != "1920000" || read("sys/devices/system/cpu/cpufreq/policy1/scaling_max_freq") != "1440000" {
+		t.Fatal("frequencies not lowered to the floor")
+	}
+	g.Restore()
+	if read("sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq") != "4800000" {
+		t.Fatal("frequency not given back")
+	}
+	put(t, root, "sys/devices/system/cpu/intel_pstate/max_perf_pct", "100")
+	if g := Detect(root); g == nil || g.Kind() != "max-perf-pct" {
+		t.Fatal("intel_pstate limit not preferred over frequencies")
+	}
+}
+
+func TestPowerBudgetCapsTheLimit(t *testing.T) {
+	root := t.TempDir()
+	put(t, root, "sys/class/thermal/thermal_zone0/type", "x86_pkg_temp")
+	put(t, root, "sys/class/thermal/thermal_zone0/temp", "50000")
+	put(t, root, "sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw", "40000000")
+	g := Detect(root)
+	limit := func() string {
+		data, _ := os.ReadFile(filepath.Join(root, "sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw"))
+		return strings.TrimSpace(string(data))
+	}
+	g.SetCeilingWatts(20)
+	if limit() != "20000000" || g.Step() {
+		t.Fatalf("budget limit %s", limit())
+	}
+	g.SetCeilingWatts(0)
+	if limit() != "40000000" {
+		t.Fatalf("budget not lifted: %s", limit())
 	}
 }

@@ -24,6 +24,8 @@ type Backend struct {
 	cpuDriver  string
 	eppFiles   []string
 	eppChoices []string
+	boost      string
+	boostOn    string
 }
 
 func (b *Backend) path(p string) string { return filepath.Join(b.root, p) }
@@ -51,6 +53,11 @@ func Detect(root string) *Backend {
 			b.cpuDriver = "intel_pstate"
 		}
 	}
+	if f := b.path("sys/devices/system/cpu/intel_pstate/no_turbo"); read(f) != "" {
+		b.boost, b.boostOn = f, "0"
+	} else if f := b.path("sys/devices/system/cpu/cpufreq/boost"); read(f) != "" {
+		b.boost, b.boostOn = f, "1"
+	}
 	return b
 }
 
@@ -73,16 +80,30 @@ func (b *Backend) platformChoice(profile string) string {
 }
 
 func (b *Backend) eppChoice(profile string, onBattery bool) string {
-	var want []string
 	switch profile {
 	case PowerSaver:
-		want = []string{"power", "balance_power"}
-	case Balanced:
-		want = []string{"balance_performance", "default"}
-		if onBattery {
-			want = []string{"balance_power", "balance_performance", "default"}
-		}
+		return b.eppFor("power")
 	case Performance:
+		return b.eppFor("performance")
+	case Balanced:
+		if onBattery {
+			return b.eppFor("balance-power")
+		}
+		return b.eppFor("balance-performance")
+	}
+	return ""
+}
+
+func (b *Backend) eppFor(bias string) string {
+	var want []string
+	switch bias {
+	case "power":
+		want = []string{"power", "balance_power"}
+	case "balance-power":
+		want = []string{"balance_power", "balance_performance", "default"}
+	case "balance-performance":
+		want = []string{"balance_performance", "default"}
+	case "performance":
 		want = []string{"performance"}
 	}
 	for _, w := range want {
@@ -156,6 +177,37 @@ func (b *Backend) Apply(profile string, onBattery bool) error {
 	if c := b.eppChoice(profile, onBattery); c != "" {
 		for _, f := range b.eppFiles {
 			if err := os.WriteFile(f, []byte(c), 0); err != nil {
+				errs = append(errs, err)
+			}
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (b *Backend) ApplySettings(platform, bias string, boost bool) error {
+	if !b.Supports(platform) {
+		return errors.New("profile not available: " + platform)
+	}
+	var errs []error
+	if c := b.platformChoice(platform); c != "" {
+		if err := os.WriteFile(b.path("sys/firmware/acpi/platform_profile"), []byte(c), 0); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if c := b.eppFor(bias); c != "" {
+		for _, f := range b.eppFiles {
+			if err := os.WriteFile(f, []byte(c), 0); err != nil {
+				errs = append(errs, err)
+			}
+		}
+	}
+	if b.boost != "" {
+		v := b.boostOn
+		if !boost {
+			v = map[string]string{"0": "1", "1": "0"}[b.boostOn]
+		}
+		if read(b.boost) != v {
+			if err := os.WriteFile(b.boost, []byte(v), 0); err != nil {
 				errs = append(errs, err)
 			}
 		}

@@ -94,3 +94,27 @@ func TestBalancedOnBatterySavesPower(t *testing.T) {
 		t.Errorf("performance on battery epp %q", got)
 	}
 }
+
+func TestSettingsTurnBoostOffAndOn(t *testing.T) {
+	root := t.TempDir()
+	put(t, root, "sys/devices/system/cpu/cpufreq/policy0/energy_performance_preference", "balance_performance")
+	put(t, root, "sys/devices/system/cpu/cpufreq/policy0/energy_performance_available_preferences", "default performance balance_performance balance_power power")
+	put(t, root, "sys/devices/system/cpu/intel_pstate/no_turbo", "0")
+	b := Detect(root)
+	if err := b.ApplySettings(PowerSaver, "power", false); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(filepath.Join(root, "sys/devices/system/cpu/intel_pstate/no_turbo")); got != "1" {
+		t.Fatalf("no_turbo %s", got)
+	}
+	if got := read(filepath.Join(root, "sys/devices/system/cpu/cpufreq/policy0/energy_performance_preference")); got != "power" {
+		t.Fatalf("epp %s", got)
+	}
+	b.ApplySettings(Balanced, "balance-power", true)
+	if got := read(filepath.Join(root, "sys/devices/system/cpu/intel_pstate/no_turbo")); got != "0" {
+		t.Fatalf("no_turbo after balanced %s", got)
+	}
+	if got := read(filepath.Join(root, "sys/devices/system/cpu/cpufreq/policy0/energy_performance_preference")); got != "balance_power" {
+		t.Fatalf("epp %s", got)
+	}
+}

@@ -49,13 +49,34 @@ desktop find the same names, objects and properties on the system bus.
   back, as `[id, a, b]` entries. `thermal` gives the temperature in degrees
   and the share of power left, `hold-power-saver` and `hold-performance` the
   application and reason of a hold (the low battery hold comes from
-  `sinty-powerd` itself), and `battery` means balanced prefers efficiency on
-  battery.
+  `sinty-powerd` itself), `battery` means balanced prefers efficiency on
+  battery, and `idle` that the session is idle.
 - **Energy** on `dev.sinty.Power1`: `package-watts`, the power the
   processor package drew since the previous reading, from its RAPL counter,
   and `cpu-low-power-idle-seconds` and `system-low-power-idle-seconds`, the
   time spent in low power idle since boot. Only the values the hardware
   reports are present.
+- **Policy.** What the hardware does follows from the chosen profile, the
+  power source, whether the session is idle (the `IdleHint` of login1) and
+  the kind of device (`-form laptop|desktop|phone|tv|headless`, detected from
+  the chassis when not given). Power saver turns the processor boost off. On
+  battery, in power saver and while the session is idle, PCI and USB devices
+  the kernel keeps always on are allowed to suspend on their own (input and
+  audio USB devices, GPU drivers, `mei_me` and PCIe ports excepted) and the
+  HDA codec powers down when silent; every value changed is put back
+  afterwards. Phones and headless machines also get a sustained package power
+  budget. After a resume, and when a device is plugged in, the settings are
+  applied again.
+- When the processor has no RAPL power limit, the thermal guard lowers
+  `intel_pstate/max_perf_pct`, or else the maximum frequency of each CPU
+  policy. The temperature is read every 2 seconds near the limit and every 10
+  seconds otherwise; power supplies every 30 seconds on battery or while
+  charging and every 2 minutes otherwise.
+- **Diagnose** on `dev.sinty.Power1` takes a number of seconds and returns
+  what kept the machine from saving power over that time: the processes
+  waking the processor, the wakeup sources, the share of time in each idle
+  state, the PCI devices awake and the last suspend. `sinty-powerd -diagnose
+  10` prints the same report.
 - Power supply changes arrive as kernel uevents; the lid switch is read from
   its input device.
 

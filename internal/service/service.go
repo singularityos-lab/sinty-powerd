@@ -18,8 +18,10 @@ import (
 	"github.com/godbus/dbus/v5/introspect"
 	"github.com/godbus/dbus/v5/prop"
 
+	"github.com/singularityos-lab/sinty-powerd/internal/devices"
 	"github.com/singularityos-lab/sinty-powerd/internal/energy"
 	"github.com/singularityos-lab/sinty-powerd/internal/gpumux"
+	"github.com/singularityos-lab/sinty-powerd/internal/policy"
 	"github.com/singularityos-lab/sinty-powerd/internal/profiles"
 	"github.com/singularityos-lab/sinty-powerd/internal/supply"
 	"github.com/singularityos-lab/sinty-powerd/internal/thermal"
@@ -47,6 +49,7 @@ type Config struct {
 	Root     string
 	StateDir string
 	Policy   supply.Policy
+	Form     policy.Form
 }
 
 type exported struct {
@@ -80,6 +83,9 @@ type Service struct {
 	guard      *thermal.Guard
 	mux        *gpumux.Mux
 	meter      *energy.Meter
+	devs       *devices.Manager
+	idle       bool
+	settings   policy.Settings
 	power      *prop.Properties
 	history    map[string]*history
 	threshold  map[string]bool
@@ -109,6 +115,7 @@ func New(cfg Config) (*Service, error) {
 		guard:     thermal.Detect(cfg.Root),
 		mux:       gpumux.Detect(cfg.Root),
 		meter:     energy.Detect(cfg.Root),
+		devs:      devices.New(cfg.Root),
 		history:   map[string]*history{},
 		threshold: map[string]bool{},
 		chosen:    profiles.Balanced,

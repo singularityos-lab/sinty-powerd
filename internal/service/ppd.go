@@ -4,10 +4,12 @@ import (
 	"log"
 	"slices"
 	"strconv"
+	"time"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/prop"
 
+	"github.com/singularityos-lab/sinty-powerd/internal/policy"
 	"github.com/singularityos-lab/sinty-powerd/internal/profiles"
 	"github.com/singularityos-lab/sinty-powerd/internal/supply"
 )
@@ -95,8 +97,13 @@ func equalValue(a, b interface{}) bool {
 // apply writes the effective profile to the hardware and publishes it.
 func (s *Service) apply() {
 	p := s.effective()
-	if err := s.backend.Apply(p, s.onBattery && s.batteryAware); err != nil {
+	s.settings = policy.Decide(policy.State{Profile: p, OnBattery: s.onBattery, BatteryAware: s.batteryAware, Idle: s.idle, Form: s.cfg.Form})
+	if err := s.backend.ApplySettings(s.settings.Platform, string(s.settings.Bias), s.settings.Boost); err != nil {
 		log.Printf("profile %s: %v", p, err)
+	}
+	s.devs.Apply(s.settings.RuntimePM, s.settings.AudioSaving)
+	if s.guard != nil {
+		s.guard.SetCeilingWatts(s.settings.PackageWatts)
 	}
 	s.setPPD("ActiveProfile", p)
 	s.setPPD("ActiveProfileHolds", s.holdList())
@@ -217,9 +224,9 @@ func (s *Service) ThermalStep() {
 	if s.guard == nil {
 		return
 	}
-	limited := s.guard.Step()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	limited := s.guard.Step()
 	degraded := ""
 	if limited {
 		degraded = "high-operating-temperature"
@@ -233,9 +240,60 @@ func (s *Service) ThermalStep() {
 
 // Stop gives the processor its full power back.
 func (s *Service) Stop() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.guard != nil {
 		s.guard.Restore()
 	}
+	s.devs.Restore()
+}
+
+func (s *Service) ThermalInterval() time.Duration {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.guard == nil {
+		return 0
+	}
+	if s.degraded != "" || s.guard.Temperature() >= s.guard.Target()-10000 {
+		return 2 * time.Second
+	}
+	return 10 * time.Second
+}
+
+func (s *Service) PollInterval() time.Duration {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.onBattery || s.display == nil || s.display.dev.State == supply.StateCharging {
+		return 30 * time.Second
+	}
+	return 2 * time.Minute
+}
+
+func (s *Service) SetIdle(idle bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if idle == s.idle {
+		return
+	}
+	s.idle = idle
+	log.Printf("session idle: %v", idle)
+	s.apply()
+}
+
+func (s *Service) Resumed() {
+	s.mu.Lock()
+	if s.guard != nil {
+		s.guard.Reapply()
+	}
+	s.apply()
+	s.mu.Unlock()
+	s.Refresh()
+}
+
+func (s *Service) DevicesAdded() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.devs.Apply(s.settings.RuntimePM, s.settings.AudioSaving)
 }
 
 const lowBatteryReason = "Battery low"

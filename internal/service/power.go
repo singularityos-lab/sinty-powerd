@@ -77,6 +77,9 @@ func (s *Service) reasons() [][]string {
 	if s.onBattery && s.batteryAware && s.effective() == profiles.Balanced {
 		out = append(out, []string{"battery", "", ""})
 	}
+	if s.idle && s.effective() != profiles.Performance {
+		out = append(out, []string{"idle", "", ""})
+	}
 	return out
 }
 

@@ -14,6 +14,20 @@ import (
 // PowerSupplyChanges calls changed for every uevent of the power_supply
 // subsystem. It returns when the uevent socket cannot be opened.
 func PowerSupplyChanges(changed func()) error {
+	return uevents(func(ev []byte) bool {
+		return bytes.Contains(ev, []byte("\x00SUBSYSTEM=power_supply\x00"))
+	}, changed)
+}
+
+func DevicesAdded(added func()) error {
+	return uevents(func(ev []byte) bool {
+		return bytes.HasPrefix(ev, []byte("add@")) &&
+			(bytes.Contains(ev, []byte("\x00SUBSYSTEM=pci\x00")) ||
+				bytes.Contains(ev, []byte("\x00SUBSYSTEM=usb\x00")) && bytes.Contains(ev, []byte("\x00DEVTYPE=usb_device\x00")))
+	}, added)
+}
+
+func uevents(match func([]byte) bool, cb func()) error {
 	fd, err := syscall.Socket(syscall.AF_NETLINK, syscall.SOCK_DGRAM|syscall.SOCK_CLOEXEC, syscall.NETLINK_KOBJECT_UEVENT)
 	if err != nil {
 		return err
@@ -33,8 +47,8 @@ func PowerSupplyChanges(changed func()) error {
 				}
 				return
 			}
-			if bytes.Contains(buf[:n], []byte("\x00SUBSYSTEM=power_supply\x00")) {
-				changed()
+			if match(buf[:n]) {
+				cb()
 			}
 		}
 	}()
