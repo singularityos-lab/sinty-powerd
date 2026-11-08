@@ -80,8 +80,10 @@ desktop find the same names, objects and properties on the system bus.
   it streams video to that terminal. Both are root only and show up in the
   `Form` and `Streaming` properties. `Radio` tells the wireless services what
   the policy wants from them: `wireless-save` turns radio power saving on,
-  off while streaming, and `wake-on-radio` asks for Bluetooth wakeup when no
-  terminal is connected.
+  off while streaming (sinty-nm applies it to the Wi-Fi interfaces), and
+  `wake-on-radio` asks for Bluetooth wakeup when no terminal is connected,
+  which the daemon applies itself by enabling the wakeup source of each
+  Bluetooth adapter and putting it back afterwards.
 - **Diagnose** on `dev.sinty.Power1` takes a number of seconds and returns
   what kept the machine from saving power over that time: the processes
   waking the processor, the wakeup sources, the share of time in each idle

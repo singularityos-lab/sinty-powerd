@@ -123,7 +123,26 @@ func (m *Manager) nvidiaGPUs() []string {
 	return out
 }
 
-func (m *Manager) Apply(runtimePM, audio bool) {
+func (m *Manager) radioWakeups() []string {
+	var out []string
+	adapters, _ := filepath.Glob(filepath.Join(m.root, "sys/class/bluetooth/hci*"))
+	for _, a := range adapters {
+		dev, err := filepath.EvalSymlinks(filepath.Join(a, "device"))
+		if err != nil {
+			continue
+		}
+		for _, d := range []string{dev, filepath.Dir(dev)} {
+			path := filepath.Join(d, "power/wakeup")
+			if read(path) != "" {
+				out = append(out, path)
+				break
+			}
+		}
+	}
+	return out
+}
+
+func (m *Manager) Apply(runtimePM, audio, wakeOnRadio bool) {
 	for _, p := range m.nvidiaGPUs() {
 		if read(p) == "on" {
 			os.WriteFile(p, []byte("auto"), 0)
@@ -143,9 +162,20 @@ func (m *Manager) Apply(runtimePM, audio bool) {
 			}
 		}
 	}
+	if wakeOnRadio {
+		for _, p := range m.radioWakeups() {
+			m.set(p, "enabled")
+		}
+	}
 	for path, orig := range m.changed {
-		isControl := strings.HasSuffix(path, "power/control")
-		if (isControl && !runtimePM) || (!isControl && !audio) {
+		wanted := audio
+		switch {
+		case strings.HasSuffix(path, "power/control"):
+			wanted = runtimePM
+		case strings.HasSuffix(path, "power/wakeup"):
+			wanted = wakeOnRadio
+		}
+		if !wanted {
 			if os.WriteFile(path, []byte(orig), 0) == nil || read(path) == "" {
 				delete(m.changed, path)
 			}

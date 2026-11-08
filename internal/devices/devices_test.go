@@ -38,7 +38,7 @@ func TestApplyAndRestore(t *testing.T) {
 	put(t, root, "sys/module/snd_hda_intel/parameters/power_save", "0")
 
 	m := New(root)
-	m.Apply(true, true)
+	m.Apply(true, true, false)
 	for path, want := range map[string]string{
 		"sys/bus/pci/devices/0000:01:00.0/power/control": "auto",
 		"sys/bus/pci/devices/0000:02:00.0/power/control": "on",
@@ -52,7 +52,7 @@ func TestApplyAndRestore(t *testing.T) {
 		}
 	}
 
-	m.Apply(false, true)
+	m.Apply(false, true, false)
 	if got := get(t, root, "sys/bus/pci/devices/0000:01:00.0/power/control"); got != "on" {
 		t.Errorf("runtime PM not given back: %s", got)
 	}
@@ -60,7 +60,7 @@ func TestApplyAndRestore(t *testing.T) {
 		t.Errorf("audio saving dropped with runtime PM: %s", got)
 	}
 
-	m.Apply(true, false)
+	m.Apply(true, false, false)
 	m.Restore()
 	for path, want := range map[string]string{
 		"sys/bus/pci/devices/0000:01:00.0/power/control": "on",
@@ -97,7 +97,7 @@ func TestNvidiaGPUAlwaysSuspends(t *testing.T) {
 	put(t, root, "sys/bus/pci/devices/0000:01:00.1/vendor", "0x10de")
 	put(t, root, "sys/bus/pci/devices/0000:01:00.1/class", "0x040300")
 	m := New(root)
-	m.Apply(false, false)
+	m.Apply(false, false, false)
 	for _, d := range []string{"0000:01:00.0", "0000:01:00.1"} {
 		if got := get(t, root, "sys/bus/pci/devices/"+d+"/power/control"); got != "auto" {
 			t.Errorf("%s: %s", d, got)
@@ -106,5 +106,30 @@ func TestNvidiaGPUAlwaysSuspends(t *testing.T) {
 	m.Restore()
 	if got := get(t, root, "sys/bus/pci/devices/0000:01:00.0/power/control"); got != "auto" {
 		t.Errorf("the GPU went back to always on: %s", got)
+	}
+}
+
+func TestWakeOnRadio(t *testing.T) {
+	root := t.TempDir()
+	usb := "sys/devices/pci0000:00/0000:00:14.0/usb3/3-10"
+	put(t, root, usb+"/power/wakeup", "disabled")
+	os.MkdirAll(filepath.Join(root, usb, "3-10:1.0/bluetooth/hci0"), 0o755)
+	os.Symlink(filepath.Join(root, usb, "3-10:1.0"), filepath.Join(root, usb, "3-10:1.0/bluetooth/hci0/device"))
+	os.MkdirAll(filepath.Join(root, "sys/class/bluetooth"), 0o755)
+	os.Symlink(filepath.Join(root, usb, "3-10:1.0/bluetooth/hci0"), filepath.Join(root, "sys/class/bluetooth/hci0"))
+
+	m := New(root)
+	m.Apply(false, false, true)
+	if v := get(t, root, usb+"/power/wakeup"); v != "enabled" {
+		t.Fatalf("wakeup %q, want enabled", v)
+	}
+	m.Apply(false, false, false)
+	if v := get(t, root, usb+"/power/wakeup"); v != "disabled" {
+		t.Fatalf("wakeup %q after the terminal returned, want disabled", v)
+	}
+	m.Apply(false, false, true)
+	m.Restore()
+	if v := get(t, root, usb+"/power/wakeup"); v != "disabled" {
+		t.Fatalf("wakeup %q after restore, want disabled", v)
 	}
 }

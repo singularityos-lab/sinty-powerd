@@ -101,7 +101,7 @@ func (s *Service) apply() {
 	if err := s.backend.ApplySettings(s.settings.Platform, string(s.settings.Bias), s.settings.Boost); err != nil {
 		log.Printf("profile %s: %v", p, err)
 	}
-	s.devs.Apply(s.settings.RuntimePM, s.settings.AudioSaving)
+	s.devs.Apply(s.settings.RuntimePM, s.settings.AudioSaving, s.settings.WakeOnRadio)
 	if s.guard != nil {
 		s.guard.SetCeilingWatts(s.settings.PackageWatts)
 	}
@@ -294,7 +294,7 @@ func (s *Service) Resumed() {
 func (s *Service) DevicesAdded() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.devs.Apply(s.settings.RuntimePM, s.settings.AudioSaving)
+	s.devs.Apply(s.settings.RuntimePM, s.settings.AudioSaving, s.settings.WakeOnRadio)
 }
 
 const lowBatteryReason = "Battery low"
