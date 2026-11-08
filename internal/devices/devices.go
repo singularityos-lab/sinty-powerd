@@ -14,6 +14,8 @@ import (
 
 var skipDrivers = []string{"nvidia", "nouveau", "radeon", "amdgpu", "mei_me", "pcieport"}
 
+const nvidiaVendor = "0x10de"
+
 const (
 	usbHID   = "03"
 	usbAudio = "01"
@@ -106,7 +108,27 @@ func (m *Manager) set(path, value string) {
 	}
 }
 
+func (m *Manager) nvidiaGPUs() []string {
+	var out []string
+	dirs, _ := filepath.Glob(filepath.Join(m.root, "sys/bus/pci/devices/*"))
+	for _, d := range dirs {
+		if read(filepath.Join(d, "vendor")) != nvidiaVendor {
+			continue
+		}
+		class := read(filepath.Join(d, "class"))
+		if strings.HasPrefix(class, "0x0300") || strings.HasPrefix(class, "0x0302") || strings.HasPrefix(class, "0x0403") {
+			out = append(out, filepath.Join(d, "power/control"))
+		}
+	}
+	return out
+}
+
 func (m *Manager) Apply(runtimePM, audio bool) {
+	for _, p := range m.nvidiaGPUs() {
+		if read(p) == "on" {
+			os.WriteFile(p, []byte("auto"), 0)
+		}
+	}
 	if runtimePM {
 		for _, p := range append(m.pciCandidates(), m.usbCandidates()...) {
 			if read(p) == "on" {

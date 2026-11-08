@@ -86,3 +86,25 @@ func TestAwakeListsDevicesKeptOn(t *testing.T) {
 		t.Fatalf("awake %+v", got)
 	}
 }
+
+func TestNvidiaGPUAlwaysSuspends(t *testing.T) {
+	root := t.TempDir()
+	put(t, root, "sys/bus/pci/devices/0000:01:00.0/power/control", "on")
+	put(t, root, "sys/bus/pci/devices/0000:01:00.0/vendor", "0x10de")
+	put(t, root, "sys/bus/pci/devices/0000:01:00.0/class", "0x030000")
+	link(t, root, "0000:01:00.0", "nvidia")
+	put(t, root, "sys/bus/pci/devices/0000:01:00.1/power/control", "on")
+	put(t, root, "sys/bus/pci/devices/0000:01:00.1/vendor", "0x10de")
+	put(t, root, "sys/bus/pci/devices/0000:01:00.1/class", "0x040300")
+	m := New(root)
+	m.Apply(false, false)
+	for _, d := range []string{"0000:01:00.0", "0000:01:00.1"} {
+		if got := get(t, root, "sys/bus/pci/devices/"+d+"/power/control"); got != "auto" {
+			t.Errorf("%s: %s", d, got)
+		}
+	}
+	m.Restore()
+	if got := get(t, root, "sys/bus/pci/devices/0000:01:00.0/power/control"); got != "auto" {
+		t.Errorf("the GPU went back to always on: %s", got)
+	}
+}

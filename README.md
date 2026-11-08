@@ -64,7 +64,9 @@ desktop find the same names, objects and properties on the system bus.
   the kernel keeps always on are allowed to suspend on their own (input and
   audio USB devices, GPU drivers, `mei_me` and PCIe ports excepted) and the
   HDA codec powers down when silent; every value changed is put back
-  afterwards. Phones and headless machines also get a sustained package power
+  afterwards. NVIDIA GPUs and their audio function are always allowed to
+  suspend, as the driver documentation asks, so an idle dedicated GPU turns
+  off. Phones and headless machines also get a sustained package power
   budget. After a resume, and when a device is plugged in, the settings are
   applied again.
 - When the processor has no RAPL power limit, the thermal guard lowers
