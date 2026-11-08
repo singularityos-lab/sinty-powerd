@@ -85,6 +85,8 @@ type Service struct {
 	meter      *energy.Meter
 	devs       *devices.Manager
 	idle       bool
+	form       policy.Form
+	streaming  bool
 	settings   policy.Settings
 	power      *prop.Properties
 	history    map[string]*history
@@ -116,6 +118,7 @@ func New(cfg Config) (*Service, error) {
 		mux:       gpumux.Detect(cfg.Root),
 		meter:     energy.Detect(cfg.Root),
 		devs:      devices.New(cfg.Root),
+		form:      cfg.Form,
 		history:   map[string]*history{},
 		threshold: map[string]bool{},
 		chosen:    profiles.Balanced,

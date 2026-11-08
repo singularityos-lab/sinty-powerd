@@ -1,6 +1,7 @@
 package service
 
 import (
+	"maps"
 	"slices"
 	"strconv"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/prop"
 
+	"github.com/singularityos-lab/sinty-powerd/internal/policy"
 	"github.com/singularityos-lab/sinty-powerd/internal/profiles"
 )
 
@@ -33,6 +35,9 @@ func (s *Service) exportPower() error {
 		"GpuMuxBooted": {Value: booted, Emit: prop.EmitFalse},
 		"Reasons":      {Value: [][]string{}, Emit: prop.EmitTrue},
 		"Energy":       {Value: map[string]float64{}, Emit: prop.EmitFalse},
+		"Form":         {Value: string(s.form), Emit: prop.EmitTrue},
+		"Streaming":    {Value: false, Emit: prop.EmitTrue},
+		"Radio":        {Value: map[string]bool{"wireless-save": true, "wake-on-radio": false}, Emit: prop.EmitTrue},
 	}})
 	if err != nil {
 		return err
@@ -56,6 +61,53 @@ func (o *powerObject) SetGpuMux(sender dbus.Sender, mode string) *dbus.Error {
 	}
 	s.power.SetMust(powerIface, "GpuMux", s.mux.Current())
 	return nil
+}
+
+func (o *powerObject) SetTerminal(sender dbus.Sender, kind string) *dbus.Error {
+	s := o.s
+	if uid, ok := s.authorized(sender); !ok || uid != 0 {
+		return denied("change the device form", uid)
+	}
+	form := policy.Headless
+	if kind != "" {
+		f, ok := policy.ParseForm(kind)
+		if !ok {
+			return dbus.NewError(powerIface+".Error.Failed", []interface{}{"unknown terminal " + kind})
+		}
+		form = f
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.form = form
+	s.power.SetMust(powerIface, "Form", string(form))
+	s.apply()
+	return nil
+}
+
+func (o *powerObject) SetStreaming(sender dbus.Sender, streaming bool) *dbus.Error {
+	s := o.s
+	if uid, ok := s.authorized(sender); !ok || uid != 0 {
+		return denied("change the streaming state", uid)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.streaming = streaming
+	s.power.SetMust(powerIface, "Streaming", streaming)
+	s.apply()
+	return nil
+}
+
+func (s *Service) publishRadio() {
+	if s.power == nil {
+		return
+	}
+	next := map[string]bool{"wireless-save": s.settings.WirelessSave, "wake-on-radio": s.settings.WakeOnRadio}
+	if cur, err := s.power.Get(powerIface, "Radio"); err == nil {
+		if old, ok := cur.Value().(map[string]bool); ok && maps.Equal(old, next) {
+			return
+		}
+	}
+	s.power.SetMust(powerIface, "Radio", next)
 }
 
 func (s *Service) publishEnergy(now time.Time) {

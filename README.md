@@ -72,6 +72,14 @@ desktop find the same names, objects and properties on the system bus.
   policy. The temperature is read every 2 seconds near the limit and every 10
   seconds otherwise; power supplies every 30 seconds on battery or while
   charging and every 2 minutes otherwise.
+- **Terminals** on `dev.sinty.Power1`: `SetTerminal` tells the daemon which
+  terminal a Sinty Core drives (`phone`, `desktop`, `tv`, or an empty string
+  when none is connected, which makes it `headless`), `SetStreaming` whether
+  it streams video to that terminal. Both are root only and show up in the
+  `Form` and `Streaming` properties. `Radio` tells the wireless services what
+  the policy wants from them: `wireless-save` turns radio power saving on,
+  off while streaming, and `wake-on-radio` asks for Bluetooth wakeup when no
+  terminal is connected.
 - **Diagnose** on `dev.sinty.Power1` takes a number of seconds and returns
   what kept the machine from saving power over that time: the processes
   waking the processor, the wakeup sources, the share of time in each idle
@@ -82,6 +90,22 @@ desktop find the same names, objects and properties on the system bus.
 
 Changing the profile, the charge threshold or the GPU mode is allowed to root and to
 regular users.
+
+## Porting
+
+`internal/policy` decides; it reads no file and writes none. Everything that
+touches the kernel sits behind `internal/profiles`, `internal/devices`,
+`internal/thermal`, `internal/energy` and `internal/diagnose`, and a port
+reimplements those against the target kernel. On FreeBSD:
+
+| Setting | Linux | FreeBSD |
+| --- | --- | --- |
+| Energy bias | `energy_performance_preference` | `dev.hwpstate_intel.N.epp` |
+| Boost | `intel_pstate/no_turbo`, `cpufreq/boost` | no knob |
+| Device runtime power | `power/control` | `hw.pci.do_power_nodriver`, `hw.usb.power_timeout` |
+| Package power limit | powercap RAPL | `MSR_PKG_POWER_LIMIT` through `cpuctl(4)` |
+| Thermal fallback | `intel_pstate/max_perf_pct`, `scaling_max_freq` | `dev.cpu.0.freq` |
+| Idle residency | `cpuidle/state*/time` | `dev.cpu.N.cx_usage` |
 
 ## Usage
 

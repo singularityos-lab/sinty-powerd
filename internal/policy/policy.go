@@ -57,6 +57,7 @@ type State struct {
 	BatteryAware bool
 	Idle         bool
 	Form         Form
+	Streaming    bool
 }
 
 type Settings struct {
@@ -66,6 +67,8 @@ type Settings struct {
 	RuntimePM    bool
 	AudioSaving  bool
 	PackageWatts float64
+	WirelessSave bool
+	WakeOnRadio  bool
 }
 
 type Budget struct {
@@ -78,7 +81,7 @@ var Budgets = map[Form]Budget{
 }
 
 func Decide(s State) Settings {
-	out := Settings{Platform: s.Profile, Boost: true}
+	out := Settings{Platform: s.Profile, Boost: true, WirelessSave: !s.Streaming, WakeOnRadio: s.Form == Headless}
 	switch s.Profile {
 	case profiles.PowerSaver:
 		out.Bias = BiasPower
@@ -106,6 +109,9 @@ func Decide(s State) Settings {
 	}
 	if b, ok := Budgets[s.Form]; ok && s.Profile != profiles.Performance {
 		out.PackageWatts = b.PackageWatts
+	}
+	if s.Streaming && out.Bias == BiasPower {
+		out.Bias = BiasBalancePower
 	}
 	return out
 }
