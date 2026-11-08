@@ -246,9 +246,21 @@ func batteryState(policy supply.Policy, onBattery bool, percentage float64) (low
 	return low, recovered
 }
 
+func batteryCritical(policy supply.Policy, onBattery bool, percentage float64) bool {
+	return onBattery && percentage > 0 && percentage <= policy.PercentageAction
+}
+
 func (s *Service) govern(onBattery bool, percentage float64) {
 	changed := onBattery != s.onBattery
 	s.onBattery = onBattery
+	switch {
+	case batteryCritical(s.cfg.Policy, onBattery, percentage) && !s.criticalFired:
+		s.criticalFired = true
+		log.Printf("battery at %.0f%%, powering off", percentage)
+		go s.powerOff()
+	case !onBattery:
+		s.criticalFired = false
+	}
 	low, recovered := batteryState(s.cfg.Policy, onBattery, percentage)
 	switch {
 	case low && !s.lowHeld:
@@ -271,6 +283,13 @@ func (s *Service) govern(onBattery bool, percentage float64) {
 	}
 	if changed {
 		s.apply()
+	}
+}
+
+func (s *Service) powerOff() {
+	call := s.conn.Object("org.freedesktop.login1", "/org/freedesktop/login1").Call("org.freedesktop.login1.Manager.PowerOff", 0, false)
+	if call.Err != nil {
+		log.Printf("power off on critical battery: %v", call.Err)
 	}
 }
 

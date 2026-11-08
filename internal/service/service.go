@@ -88,6 +88,8 @@ type Service struct {
 	batteryAware bool
 	lowHeld      bool
 	lowCookie    uint32
+
+	criticalFired bool
 }
 
 // New connects to the system bus and publishes UPower and the power

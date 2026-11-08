@@ -26,3 +26,22 @@ func TestBatteryStateHoldsAndRecovers(t *testing.T) {
 		}
 	}
 }
+
+func TestCriticalBatteryAtTheActionLevel(t *testing.T) {
+	cases := []struct {
+		onBattery  bool
+		percentage float64
+		critical   bool
+	}{
+		{true, 2, true},
+		{true, 1, true},
+		{true, 3, false},
+		{true, 0, false},
+		{false, 1, false},
+	}
+	for _, c := range cases {
+		if got := batteryCritical(supply.DefaultPolicy, c.onBattery, c.percentage); got != c.critical {
+			t.Errorf("battery %v at %v%%: critical %v", c.onBattery, c.percentage, got)
+		}
+	}
+}
