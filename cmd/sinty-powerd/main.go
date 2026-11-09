@@ -67,6 +67,9 @@ func main() {
 		}
 		time.Sleep(time.Second)
 	}
+	if n := s.RestoreBrightness(); n > 0 {
+		log.Printf("restored the brightness of %d panels", n)
+	}
 	s.Refresh()
 	s.Start()
 	go s.WatchHolders()

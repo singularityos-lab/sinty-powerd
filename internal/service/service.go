@@ -18,6 +18,7 @@ import (
 	"github.com/godbus/dbus/v5/introspect"
 	"github.com/godbus/dbus/v5/prop"
 
+	"github.com/singularityos-lab/sinty-powerd/internal/brightness"
 	"github.com/singularityos-lab/sinty-powerd/internal/devices"
 	"github.com/singularityos-lab/sinty-powerd/internal/energy"
 	"github.com/singularityos-lab/sinty-powerd/internal/gpumux"
@@ -67,8 +68,9 @@ type hold struct {
 
 // Service is the running daemon.
 type Service struct {
-	cfg  Config
-	conn *dbus.Conn
+	cfg    Config
+	conn   *dbus.Conn
+	bright *brightness.Store
 
 	mu         sync.Mutex
 	devices    map[string]*exported
@@ -131,7 +133,7 @@ func New(cfg Config) (*Service, error) {
 		conn.Close()
 		return nil, err
 	}
-	for _, name := range []string{upowerName, ppdEndpoints[0].name, ppdEndpoints[1].name, powerName} {
+	for _, name := range []string{upowerName, ppdEndpoints[0].name, ppdEndpoints[1].name, powerName, brightnessName} {
 		reply, err := conn.RequestName(name, dbus.NameFlagReplaceExisting|dbus.NameFlagDoNotQueue)
 		if err != nil {
 			conn.Close()
@@ -214,6 +216,9 @@ func (s *Service) export() error {
 		}
 	}
 	if err := s.exportEnergyArea(); err != nil {
+		return err
+	}
+	if err := s.exportBrightness(); err != nil {
 		return err
 	}
 	return s.exportPower()
