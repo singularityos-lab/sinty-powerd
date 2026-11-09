@@ -142,3 +142,40 @@ func TestWakeOnRadio(t *testing.T) {
 		t.Fatalf("wakeup %q after restore, want disabled", v)
 	}
 }
+
+func TestHoldKeepsTheEncoderAwake(t *testing.T) {
+	root := t.TempDir()
+	enc := "sys/bus/platform/devices/fdea0000.video-codec"
+	put(t, root, enc+"/power/control", "auto")
+	put(t, root, "sys/bus/pci/devices/0000:01:00.0/power/control", "on")
+	m := New(root)
+	m.Hold(filepath.Join(root, enc))
+	m.Apply(true, false, false)
+	if got := get(t, root, enc+"/power/control"); got != "on" {
+		t.Fatalf("encoder while held: %s", got)
+	}
+	if got := get(t, root, "sys/bus/pci/devices/0000:01:00.0/power/control"); got != "auto" {
+		t.Fatalf("other device: %s", got)
+	}
+	m.Hold("")
+	if got := get(t, root, enc+"/power/control"); got != "auto" {
+		t.Fatalf("encoder after release: %s", got)
+	}
+	m.Hold(filepath.Join(root, enc))
+	m.Restore()
+	if got := get(t, root, enc+"/power/control"); got != "auto" || m.Held() != "" {
+		t.Fatalf("encoder after restore: %s held %q", got, m.Held())
+	}
+}
+
+func TestHeldPCIDeviceIsLeftOn(t *testing.T) {
+	root := t.TempDir()
+	dev := "sys/bus/pci/devices/0000:00:02.0"
+	put(t, root, dev+"/power/control", "on")
+	m := New(root)
+	m.Hold(filepath.Join(root, dev))
+	m.Apply(true, false, false)
+	if got := get(t, root, dev+"/power/control"); got != "on" {
+		t.Fatalf("held PCI encoder suspended: %s", got)
+	}
+}

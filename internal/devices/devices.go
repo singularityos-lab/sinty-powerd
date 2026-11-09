@@ -27,8 +27,10 @@ const (
 )
 
 type Manager struct {
-	root    string
-	changed map[string]string
+	root     string
+	changed  map[string]string
+	held     string
+	heldOrig string
 }
 
 func New(root string) *Manager {
@@ -147,6 +149,27 @@ func (m *Manager) radioWakeups() []string {
 	return out
 }
 
+func (m *Manager) Hold(dir string) {
+	if dir == m.held {
+		return
+	}
+	if m.held != "" && m.heldOrig != "" {
+		os.WriteFile(filepath.Join(m.held, "power/control"), []byte(m.heldOrig), 0)
+	}
+	m.held, m.heldOrig = dir, ""
+	if dir == "" {
+		return
+	}
+	path := filepath.Join(dir, "power/control")
+	if cur := read(path); cur != "" && cur != "on" {
+		if os.WriteFile(path, []byte("on"), 0) == nil {
+			m.heldOrig = cur
+		}
+	}
+}
+
+func (m *Manager) Held() string { return m.held }
+
 func (m *Manager) Apply(runtimePM, audio, wakeOnRadio bool) {
 	for _, p := range m.nvidiaGPUs() {
 		if read(p) == "on" {
@@ -155,6 +178,9 @@ func (m *Manager) Apply(runtimePM, audio, wakeOnRadio bool) {
 	}
 	if runtimePM {
 		for _, p := range append(m.pciCandidates(), m.usbCandidates()...) {
+			if m.held != "" && p == filepath.Join(m.held, "power/control") {
+				continue
+			}
 			if read(p) == "on" {
 				m.set(p, "auto")
 			}
@@ -192,6 +218,7 @@ func (m *Manager) Apply(runtimePM, audio, wakeOnRadio bool) {
 }
 
 func (m *Manager) Restore() {
+	m.Hold("")
 	for path, orig := range m.changed {
 		os.WriteFile(path, []byte(orig), 0)
 		delete(m.changed, path)

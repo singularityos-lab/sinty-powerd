@@ -87,6 +87,7 @@ type Service struct {
 	idle       bool
 	form       policy.Form
 	streaming  bool
+	encoder    string
 	settings   policy.Settings
 	power      *prop.Properties
 	history    map[string]*history

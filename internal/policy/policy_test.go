@@ -36,6 +36,8 @@ func TestDecide(t *testing.T) {
 			Settings{Platform: profiles.Performance, Bias: BiasPerformance, Boost: true, RuntimePM: true, AudioSaving: true, WirelessSave: true}},
 		{"streaming from an idle headless core", State{Profile: profiles.Balanced, Form: Headless, Streaming: true},
 			Settings{Platform: profiles.Balanced, Bias: BiasBalancePower, Boost: true, RuntimePM: true, AudioSaving: true, PackageWatts: 4, WakeOnRadio: true}},
+		{"streaming through a hardware encoder", State{Profile: profiles.Balanced, Form: Headless, Streaming: true, Encoder: true},
+			Settings{Platform: profiles.Balanced, Bias: BiasPower, Boost: true, RuntimePM: true, AudioSaving: true, PackageWatts: 4, WakeOnRadio: true}},
 	}
 	for _, c := range cases {
 		if got := Decide(c.in); got != c.want {

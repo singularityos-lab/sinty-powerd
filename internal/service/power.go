@@ -1,7 +1,10 @@
 package service
 
 import (
+	"fmt"
 	"maps"
+	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"time"
@@ -37,6 +40,7 @@ func (s *Service) exportPower() error {
 		"Energy":       {Value: map[string]float64{}, Emit: prop.EmitFalse},
 		"Form":         {Value: string(s.form), Emit: prop.EmitTrue},
 		"Streaming":    {Value: false, Emit: prop.EmitTrue},
+		"Encoder":      {Value: "", Emit: prop.EmitTrue},
 		"Radio":        {Value: map[string]bool{"wireless-save": true, "wake-on-radio": false}, Emit: prop.EmitTrue},
 	}})
 	if err != nil {
@@ -93,7 +97,46 @@ func (o *powerObject) SetStreaming(sender dbus.Sender, streaming bool) *dbus.Err
 	defer s.mu.Unlock()
 	s.streaming = streaming
 	s.power.SetMust(powerIface, "Streaming", streaming)
+	if !streaming {
+		s.holdEncoder("")
+	}
 	s.apply()
+	return nil
+}
+
+var videoDevice = regexp.MustCompile(`^/dev/video[0-9]+$`)
+
+func (o *powerObject) SetEncoder(sender dbus.Sender, device string) *dbus.Error {
+	s := o.s
+	if uid, ok := s.authorized(sender); !ok || uid != 0 {
+		return denied("change the video encoder", uid)
+	}
+	if device != "" && !videoDevice.MatchString(device) {
+		return dbus.NewError(powerIface+".Error.Failed", []interface{}{"not a video device: " + device})
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.holdEncoder(device); err != nil {
+		return dbus.NewError(powerIface+".Error.Failed", []interface{}{err.Error()})
+	}
+	s.apply()
+	return nil
+}
+
+func (s *Service) holdEncoder(device string) error {
+	dir := ""
+	if device != "" {
+		d, err := filepath.EvalSymlinks(filepath.Join(s.cfg.Root, "sys/class/video4linux", filepath.Base(device), "device"))
+		if err != nil {
+			return fmt.Errorf("no video device %s", device)
+		}
+		dir = d
+	}
+	s.devs.Hold(dir)
+	s.encoder = device
+	if s.power != nil {
+		s.power.SetMust(powerIface, "Encoder", device)
+	}
 	return nil
 }
 

@@ -58,6 +58,7 @@ type State struct {
 	Idle         bool
 	Form         Form
 	Streaming    bool
+	Encoder      bool
 }
 
 type Settings struct {
@@ -110,7 +111,7 @@ func Decide(s State) Settings {
 	if b, ok := Budgets[s.Form]; ok && s.Profile != profiles.Performance {
 		out.PackageWatts = b.PackageWatts
 	}
-	if s.Streaming && out.Bias == BiasPower {
+	if s.Streaming && !s.Encoder && out.Bias == BiasPower {
 		out.Bias = BiasBalancePower
 	}
 	return out

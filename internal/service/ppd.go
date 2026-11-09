@@ -97,7 +97,7 @@ func equalValue(a, b interface{}) bool {
 // apply writes the effective profile to the hardware and publishes it.
 func (s *Service) apply() {
 	p := s.effective()
-	s.settings = policy.Decide(policy.State{Profile: p, OnBattery: s.onBattery, BatteryAware: s.batteryAware, Idle: s.idle, Form: s.form, Streaming: s.streaming})
+	s.settings = policy.Decide(policy.State{Profile: p, OnBattery: s.onBattery, BatteryAware: s.batteryAware, Idle: s.idle, Form: s.form, Streaming: s.streaming, Encoder: s.encoder != ""})
 	if err := s.backend.ApplySettings(s.settings.Platform, string(s.settings.Bias), s.settings.Boost); err != nil {
 		log.Printf("profile %s: %v", p, err)
 	}

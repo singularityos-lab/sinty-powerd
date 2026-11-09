@@ -84,7 +84,11 @@ desktop find the same names, objects and properties on the system bus.
   off while streaming (sinty-nm applies it to the Wi-Fi interfaces), and
   `wake-on-radio` asks for Bluetooth wakeup when no terminal is connected,
   which the daemon applies itself by enabling the wakeup source of each
-  Bluetooth adapter and putting it back afterwards.
+  Bluetooth adapter and putting it back afterwards. `SetEncoder` names the
+  video encoder a stream goes through (`/dev/videoN`, or an empty string): the
+  daemon keeps that device out of runtime suspend until the stream ends, and
+  a stream through a hardware encoder no longer lifts the power bias. The
+  device shows up in the `Encoder` property.
 - **Diagnose** on `dev.sinty.Power1` takes a number of seconds and returns
   what kept the machine from saving power over that time: the processes
   waking the processor, the wakeup sources, the share of time in each idle
