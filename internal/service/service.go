@@ -213,6 +213,9 @@ func (s *Service) export() error {
 			return err
 		}
 	}
+	if err := s.exportEnergyArea(); err != nil {
+		return err
+	}
 	return s.exportPower()
 }
 

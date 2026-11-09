@@ -134,7 +134,11 @@ func (s *Service) setActive(c *prop.Change) *dbus.Error {
 func (s *Service) choose(profile string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	changed := s.chosen != profile
 	s.chosen = profile
+	if changed {
+		defer s.energyChanged()
+	}
 	for _, h := range s.holds {
 		for _, ep := range ppdEndpoints {
 			s.conn.Emit(ep.path, ep.iface+".ProfileReleased", h.cookie)
