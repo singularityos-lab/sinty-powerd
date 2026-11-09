@@ -29,6 +29,8 @@ func main() {
 	flag.Parse()
 	log.SetFlags(0)
 	log.SetPrefix("sinty-powerd: ")
+	var syncKernel func()
+	*root, syncKernel = platform(*root)
 	if os.Getenv("DBUS_SYSTEM_BUS_ADDRESS") == "" {
 		os.Setenv("DBUS_SYSTEM_BUS_ADDRESS", "unix:path=/run/dbus/system_bus_socket")
 	}
@@ -109,14 +111,17 @@ func main() {
 		select {
 		case <-refresh:
 			time.Sleep(200 * time.Millisecond)
+			syncKernel()
 			s.Refresh()
 		case <-added:
 			time.Sleep(time.Second)
 			s.DevicesAdded()
 		case <-poll.C:
+			syncKernel()
 			s.Refresh()
 			poll.Reset(s.PollInterval())
 		case <-thermal:
+			syncKernel()
 			s.ThermalStep()
 			thermalTimer()
 		case <-save.C:

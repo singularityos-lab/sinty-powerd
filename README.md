@@ -96,21 +96,25 @@ desktop find the same names, objects and properties on the system bus.
 Changing the profile, the charge threshold or the GPU mode is allowed to root and to
 regular users.
 
-## Porting
+## FreeBSD
 
-`internal/policy` decides; it reads no file and writes none. Everything that
-touches the kernel sits behind `internal/profiles`, `internal/devices`,
-`internal/thermal`, `internal/energy` and `internal/diagnose`, and a port
-reimplements those against the target kernel. On FreeBSD:
+`internal/policy` decides; it reads no file and writes none. On FreeBSD,
+`internal/mirror` keeps a sysfs-shaped tree in
+`/var/run/sinty-powerd/sys-mirror` filled from sysctl, so the readers above
+work unchanged, and sends what powerd writes there back to sysctl as soon as
+it is written. Power and lid events come from devd.
 
 | Setting | Linux | FreeBSD |
 | --- | --- | --- |
+| AC and battery | `power_supply` | `hw.acpi.acline`, `hw.acpi.battery.*` |
+| Temperature | `thermal_zone*` | `hw.acpi.thermal.tzN.temperature`, `_CRT` |
 | Energy bias | `energy_performance_preference` | `dev.hwpstate_intel.N.epp` |
-| Boost | `intel_pstate/no_turbo`, `cpufreq/boost` | no knob |
-| Device runtime power | `power/control` | `hw.pci.do_power_nodriver`, `hw.usb.power_timeout` |
-| Package power limit | powercap RAPL | `MSR_PKG_POWER_LIMIT` through `cpuctl(4)` |
-| Thermal fallback | `intel_pstate/max_perf_pct`, `scaling_max_freq` | `dev.cpu.0.freq` |
-| Idle residency | `cpuidle/state*/time` | `dev.cpu.N.cx_usage` |
+| Thermal fallback | `scaling_max_freq` | `dev.cpu.0.freq`, rounded down to `freq_levels` |
+| Events | uevent netlink, evdev lid switch | `/var/run/devd.seqpacket.pipe` |
+
+Boost, device runtime power, the RAPL package limit and idle residency have no
+FreeBSD counterpart in powerd yet: the readers find nothing in the mirror and
+leave them alone.
 
 ## Usage
 
@@ -123,5 +127,5 @@ reimplements those against the target kernel. On FreeBSD:
     make test
     go build ./...        # plain build
 
-Requires Go >= 1.25 and Linux. The non-stdlib dependency is
+Requires Go >= 1.25. Builds for Linux and FreeBSD. The non-stdlib dependency is
 `github.com/godbus/dbus/v5`.
