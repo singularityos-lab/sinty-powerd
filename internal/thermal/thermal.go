@@ -14,7 +14,7 @@ import (
 
 // Guard watches one temperature and steers one power limit.
 type Guard struct {
-	temp       string
+	temps      []string
 	knobs      []knob
 	original   uint64
 	current    uint64
@@ -69,7 +69,11 @@ func Detect(root string) *Guard {
 			}
 		}
 	}
+	temps := []string{temp}
 	if temp == "" {
+		temps = socZones(zones)
+	}
+	if len(temps) == 0 {
 		return nil
 	}
 	knobs, kind := limits(root)
@@ -81,7 +85,7 @@ func Detect(root string) *Guard {
 		target = critical - 15000
 	}
 	return &Guard{
-		temp:       temp,
+		temps:      temps,
 		knobs:      knobs,
 		kind:       kind,
 		original:   1000,
@@ -90,6 +94,32 @@ func Detect(root string) *Guard {
 		target:     target,
 		hysteresis: 8000,
 	}
+}
+
+func socZones(zones []string) []string {
+	var out []string
+	for _, z := range zones {
+		data, _ := os.ReadFile(filepath.Join(z, "type"))
+		kind := strings.ToLower(strings.TrimSpace(string(data)))
+		if strings.Contains(kind, "gpu") || strings.Contains(kind, "battery") || strings.Contains(kind, "pmic") {
+			continue
+		}
+		if strings.Contains(kind, "cpu") || strings.Contains(kind, "core") || strings.Contains(kind, "soc") || strings.Contains(kind, "cluster") {
+			out = append(out, filepath.Join(z, "temp"))
+		}
+	}
+	return out
+}
+
+func (g *Guard) hottest() (int64, bool) {
+	var best int64
+	found := false
+	for _, p := range g.temps {
+		if t, ok := readInt(p); ok && (!found || t > best) {
+			best, found = t, true
+		}
+	}
+	return best, found
 }
 
 func limits(root string) ([]knob, string) {
@@ -152,7 +182,7 @@ func (g *Guard) Target() int64 { return g.target }
 // Step reads the temperature once and adjusts the limit. It reports whether
 // the processor currently runs below its full power.
 func (g *Guard) Step() bool {
-	t, ok := readInt(g.temp)
+	t, ok := g.hottest()
 	if !ok {
 		return g.current < g.original
 	}

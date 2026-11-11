@@ -25,7 +25,7 @@ func TestGuardThrottlesAndRecovers(t *testing.T) {
 	put(t, root, "sys/class/thermal/thermal_zone1/temp", "60000")
 	put(t, root, "sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw", "28000000")
 	g := Detect(root)
-	if g == nil || g.Target() != 90000 || g.temp != filepath.Join(root, "sys/class/thermal/thermal_zone1/temp") {
+	if g == nil || g.Target() != 90000 || len(g.temps) != 1 || g.temps[0] != filepath.Join(root, "sys/class/thermal/thermal_zone1/temp") {
 		t.Fatalf("guard %+v", g)
 	}
 	limit := func() int {
@@ -114,5 +114,35 @@ func TestPowerBudgetCapsTheLimit(t *testing.T) {
 	g.SetCeilingWatts(0)
 	if limit() != "40000000" {
 		t.Fatalf("budget not lifted: %s", limit())
+	}
+}
+
+func TestGuardWatchesEveryCoreZoneOnArm(t *testing.T) {
+	root := t.TempDir()
+	zones := map[string]string{"0": "soc-thermal", "1": "bigcore0-thermal", "2": "littlecore-thermal", "3": "gpu-thermal", "4": "battery"}
+	for n, kind := range zones {
+		put(t, root, "sys/class/thermal/thermal_zone"+n+"/type", kind)
+		put(t, root, "sys/class/thermal/thermal_zone"+n+"/temp", "50000")
+	}
+	put(t, root, "sys/class/thermal/thermal_zone0/trip_point_0_type", "critical")
+	put(t, root, "sys/class/thermal/thermal_zone0/trip_point_0_temp", "115000")
+	for _, p := range []string{"policy0", "policy4"} {
+		put(t, root, "sys/devices/system/cpu/cpufreq/"+p+"/scaling_max_freq", "2400000")
+	}
+	g := Detect(root)
+	if g == nil || len(g.temps) != 3 || g.Kind() != "max-freq" {
+		t.Fatalf("guard %+v", g)
+	}
+	put(t, root, "sys/class/thermal/thermal_zone3/temp", "99000")
+	if g.Step() {
+		t.Fatal("a hot GPU zone must not slow the processor")
+	}
+	put(t, root, "sys/class/thermal/thermal_zone1/temp", "99000")
+	if !g.Step() || g.Temperature() != 99000 {
+		t.Fatalf("hot big core not acted on: %d", g.Temperature())
+	}
+	data, _ := os.ReadFile(filepath.Join(root, "sys/devices/system/cpu/cpufreq/policy4/scaling_max_freq"))
+	if strings.TrimSpace(string(data)) == "2400000" {
+		t.Fatal("frequency cap not lowered")
 	}
 }

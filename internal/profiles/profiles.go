@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -26,6 +27,10 @@ type Backend struct {
 	eppChoices []string
 	boost      string
 	boostOn    string
+	governors  []string
+	eas        string
+	clamp      string
+	devfreq    []string
 }
 
 func (b *Backend) path(p string) string { return filepath.Join(b.root, p) }
@@ -51,6 +56,32 @@ func Detect(root string) *Backend {
 		b.cpuDriver = read(filepath.Join(filepath.Dir(files[0]), "scaling_driver"))
 		if b.cpuDriver == "" {
 			b.cpuDriver = "intel_pstate"
+		}
+	}
+	if len(b.eppFiles) == 0 {
+		files, _ := filepath.Glob(b.path("sys/devices/system/cpu/cpufreq/policy*/scaling_available_governors"))
+		for _, f := range files {
+			if slices.Contains(strings.Fields(read(f)), "schedutil") {
+				b.governors = append(b.governors, filepath.Join(filepath.Dir(f), "scaling_governor"))
+			}
+		}
+		if len(b.governors) > 0 {
+			b.cpuDriver = read(filepath.Join(filepath.Dir(b.governors[0]), "scaling_driver"))
+			if b.cpuDriver == "" {
+				b.cpuDriver = "cpufreq"
+			}
+			if f := b.path("proc/sys/kernel/sched_energy_aware"); read(f) != "" {
+				b.eas = f
+			}
+			if f := b.path("proc/sys/kernel/sched_util_clamp_max"); read(f) != "" {
+				b.clamp = f
+			}
+			dirs, _ := filepath.Glob(b.path("sys/class/devfreq/*"))
+			for _, d := range dirs {
+				if read(filepath.Join(d, "available_governors")) != "" {
+					b.devfreq = append(b.devfreq, d)
+				}
+			}
 		}
 	}
 	if f := b.path("sys/devices/system/cpu/intel_pstate/no_turbo"); read(f) != "" {
@@ -132,7 +163,7 @@ func (b *Backend) Profiles() []Profile {
 		if b.platformChoice(name) != "" {
 			p.PlatformDriver = "platform_profile"
 		}
-		if len(b.eppFiles) > 0 && b.eppChoice(name, false) != "" {
+		if len(b.eppFiles) > 0 && b.eppChoice(name, false) != "" || len(b.governors) > 0 {
 			p.CPUDriver = b.cpuDriver
 		}
 		switch {
@@ -181,6 +212,61 @@ func (b *Backend) Apply(profile string, onBattery bool) error {
 			}
 		}
 	}
+	bias := map[string]string{PowerSaver: "power", Balanced: "balance-performance", Performance: "performance"}[profile]
+	if profile == Balanced && onBattery {
+		bias = "balance-power"
+	}
+	errs = append(errs, b.applyScheduler(bias))
+	return errors.Join(errs...)
+}
+
+const fullClamp = 1024
+
+func writeIfChanged(path, value string) error {
+	if read(path) == value {
+		return nil
+	}
+	return os.WriteFile(path, []byte(value), 0)
+}
+
+func (b *Backend) applyScheduler(bias string) error {
+	if len(b.governors) == 0 {
+		return nil
+	}
+	var errs []error
+	for _, f := range b.governors {
+		errs = append(errs, writeIfChanged(f, "schedutil"))
+	}
+	if b.eas != "" {
+		v := "1"
+		if bias == "performance" {
+			v = "0"
+		}
+		errs = append(errs, writeIfChanged(b.eas, v))
+	}
+	if b.clamp != "" {
+		clamp := fullClamp
+		switch bias {
+		case "power":
+			clamp = fullClamp * 5 / 8
+		case "balance-power":
+			clamp = fullClamp * 7 / 8
+		}
+		errs = append(errs, writeIfChanged(b.clamp, strconv.Itoa(clamp)))
+	}
+	for _, d := range b.devfreq {
+		choices := strings.Fields(read(filepath.Join(d, "available_governors")))
+		want := []string{"simple_ondemand"}
+		if bias == "performance" {
+			want = []string{"performance", "simple_ondemand"}
+		}
+		for _, w := range want {
+			if slices.Contains(choices, w) {
+				errs = append(errs, writeIfChanged(filepath.Join(d, "governor"), w))
+				break
+			}
+		}
+	}
 	return errors.Join(errs...)
 }
 
@@ -201,6 +287,7 @@ func (b *Backend) ApplySettings(platform, bias string, boost bool) error {
 			}
 		}
 	}
+	errs = append(errs, b.applyScheduler(bias))
 	if b.boost != "" {
 		v := b.boostOn
 		if !boost {

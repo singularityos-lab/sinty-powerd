@@ -70,6 +70,15 @@ desktop find the same names, objects and properties on the system bus.
   off. Phones and headless machines also get a sustained package power
   budget. After a resume, and when a device is plugged in, the settings are
   applied again.
+- **ARM.** Where the CPU frequency driver has no energy preference, the
+  profiles drive the scheduler instead: every policy runs `schedutil`,
+  energy aware scheduling places tasks on the cores that do the work for the
+  least energy (off in performance, so work spreads to the big cores),
+  power saver and balanced on battery cap utilization with
+  `sched_util_clamp_max` so tasks stay on the little cores at lower
+  frequencies, and GPU and memory devfreq run `simple_ondemand`, or
+  `performance` in performance. The thermal guard watches every CPU, core
+  and SoC zone together and acts on the hottest.
 - When the processor has no RAPL power limit, the thermal guard lowers
   `intel_pstate/max_perf_pct`, or else the maximum frequency of each CPU
   policy. The temperature is read every 2 seconds near the limit and every 10

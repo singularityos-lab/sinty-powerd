@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -116,5 +117,89 @@ func TestSettingsTurnBoostOffAndOn(t *testing.T) {
 	}
 	if got := read(filepath.Join(root, "sys/devices/system/cpu/cpufreq/policy0/energy_performance_preference")); got != "balance_power" {
 		t.Fatalf("epp %s", got)
+	}
+}
+
+func armRoot(t *testing.T) string {
+	root := t.TempDir()
+	w := func(p, v string) {
+		f := filepath.Join(root, p)
+		os.MkdirAll(filepath.Dir(f), 0o755)
+		os.WriteFile(f, []byte(v+"\n"), 0o644)
+	}
+	for _, p := range []string{"policy0", "policy4", "policy6"} {
+		w("sys/devices/system/cpu/cpufreq/"+p+"/scaling_available_governors", "conservative ondemand userspace powersave performance schedutil")
+		w("sys/devices/system/cpu/cpufreq/"+p+"/scaling_governor", "performance")
+		w("sys/devices/system/cpu/cpufreq/"+p+"/scaling_driver", "cpufreq-dt")
+	}
+	w("proc/sys/kernel/sched_energy_aware", "0")
+	w("proc/sys/kernel/sched_util_clamp_max", "1024")
+	for _, d := range []string{"fb000000.gpu", "dmc"} {
+		w("sys/class/devfreq/"+d+"/available_governors", "simple_ondemand userspace powersave performance")
+		w("sys/class/devfreq/"+d+"/governor", "userspace")
+	}
+	return root
+}
+
+func value(t *testing.T, root, p string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, p))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimSpace(string(data))
+}
+
+func TestArmProfilesSteerTheScheduler(t *testing.T) {
+	root := armRoot(t)
+	b := Detect(root)
+	if !b.Supports(Performance) || b.Profiles()[0].CPUDriver != "cpufreq-dt" {
+		t.Fatalf("profiles %+v", b.Profiles())
+	}
+	if err := b.Apply(Balanced, false); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"policy0", "policy4", "policy6"} {
+		if g := value(t, root, "sys/devices/system/cpu/cpufreq/"+p+"/scaling_governor"); g != "schedutil" {
+			t.Fatalf("%s governor %q", p, g)
+		}
+	}
+	if value(t, root, "proc/sys/kernel/sched_energy_aware") != "1" || value(t, root, "proc/sys/kernel/sched_util_clamp_max") != "1024" {
+		t.Fatal("balanced must place tasks by energy with no clamp")
+	}
+	if value(t, root, "sys/class/devfreq/fb000000.gpu/governor") != "simple_ondemand" {
+		t.Fatal("gpu devfreq governor")
+	}
+	b.Apply(PowerSaver, false)
+	if value(t, root, "proc/sys/kernel/sched_util_clamp_max") != "640" || value(t, root, "proc/sys/kernel/sched_energy_aware") != "1" {
+		t.Fatal("power saver must clamp utilization so tasks stay on the little cores")
+	}
+	b.Apply(Balanced, true)
+	if value(t, root, "proc/sys/kernel/sched_util_clamp_max") != "896" {
+		t.Fatal("balanced on battery")
+	}
+	b.Apply(Performance, false)
+	if value(t, root, "proc/sys/kernel/sched_energy_aware") != "0" || value(t, root, "proc/sys/kernel/sched_util_clamp_max") != "1024" {
+		t.Fatal("performance must spread work to the big cores")
+	}
+	if value(t, root, "sys/class/devfreq/dmc/governor") != "performance" {
+		t.Fatal("memory controller must run at full speed in performance")
+	}
+	if err := b.ApplySettings(PowerSaver, "power", false); err != nil {
+		t.Fatal(err)
+	}
+	if value(t, root, "proc/sys/kernel/sched_util_clamp_max") != "640" {
+		t.Fatal("policy settings path")
+	}
+}
+
+func TestX86KeepsItsKnobs(t *testing.T) {
+	root := armRoot(t)
+	f := filepath.Join(root, "sys/devices/system/cpu/cpufreq/policy0/energy_performance_preference")
+	os.WriteFile(f, []byte("default\n"), 0o644)
+	b := Detect(root)
+	b.Apply(PowerSaver, false)
+	if value(t, root, "proc/sys/kernel/sched_util_clamp_max") != "1024" {
+		t.Fatal("a processor with energy preferences must not be clamped")
 	}
 }
