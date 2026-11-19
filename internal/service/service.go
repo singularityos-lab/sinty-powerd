@@ -26,6 +26,7 @@ import (
 	"github.com/singularityos-lab/sinty-powerd/internal/profiles"
 	"github.com/singularityos-lab/sinty-powerd/internal/supply"
 	"github.com/singularityos-lab/sinty-powerd/internal/thermal"
+	"github.com/singularityos-lab/sinty-powerd/internal/usage"
 )
 
 const (
@@ -85,6 +86,7 @@ type Service struct {
 	guard      *thermal.Guard
 	mux        *gpumux.Mux
 	meter      *energy.Meter
+	usage      *usage.Tracker
 	devs       *devices.Manager
 	idle       bool
 	form       policy.Form
@@ -120,6 +122,7 @@ func New(cfg Config) (*Service, error) {
 		guard:     thermal.Detect(cfg.Root),
 		mux:       gpumux.Detect(cfg.Root),
 		meter:     energy.Detect(cfg.Root),
+		usage:     newUsage(cfg.Root, filepath.Join(cfg.StateDir, "usage.json"), time.Now()),
 		devs:      devices.New(cfg.Root),
 		form:      cfg.Form,
 		history:   map[string]*history{},

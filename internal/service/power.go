@@ -42,6 +42,8 @@ func (s *Service) exportPower() error {
 		"Streaming":    {Value: false, Emit: prop.EmitTrue},
 		"Encoder":      {Value: "", Emit: prop.EmitTrue},
 		"Radio":        {Value: map[string]bool{"wireless-save": true, "wake-on-radio": false}, Emit: prop.EmitTrue},
+		"Significant":  {Value: []string{}, Emit: prop.EmitTrue},
+		"Hot":          {Value: []hotProcess{}, Emit: prop.EmitTrue},
 	}})
 	if err != nil {
 		return err

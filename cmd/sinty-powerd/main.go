@@ -110,6 +110,7 @@ func main() {
 	}
 	thermalTimer()
 	save := time.NewTicker(10 * time.Minute)
+	usageTick := time.NewTicker(service.UsageInterval)
 	for {
 		select {
 		case <-refresh:
@@ -127,11 +128,15 @@ func main() {
 			syncKernel()
 			s.ThermalStep()
 			thermalTimer()
+		case <-usageTick.C:
+			s.SampleUsage(time.Now())
 		case <-save.C:
 			s.SaveHistory()
+			s.SaveUsage()
 		case <-sigs:
 			s.Stop()
 			s.SaveHistory()
+			s.SaveUsage()
 			return
 		}
 	}
