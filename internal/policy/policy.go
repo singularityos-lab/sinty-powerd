@@ -82,7 +82,8 @@ var Budgets = map[Form]Budget{
 }
 
 func Decide(s State) Settings {
-	out := Settings{Platform: s.Profile, Boost: true, WirelessSave: !s.Streaming, WakeOnRadio: s.Form == Headless}
+	saveRadio := s.OnBattery || s.Profile == profiles.PowerSaver || s.Form == Phone || s.Form == Headless
+	out := Settings{Platform: s.Profile, Boost: true, WirelessSave: saveRadio && !s.Streaming, WakeOnRadio: s.Form == Headless}
 	switch s.Profile {
 	case profiles.PowerSaver:
 		out.Bias = BiasPower
