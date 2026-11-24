@@ -7,6 +7,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/mirkobrombin/atomloops/sealedlog"
 	"log"
 	"os"
 	"os/signal"
@@ -55,10 +56,12 @@ func main() {
 	}
 	log.Printf("device form: %s", form)
 
+	sealed, _ := sealedlog.Open("powerd")
+	sealed.Log("start")
 	var s *service.Service
 	var err error
 	for i := 0; ; i++ {
-		s, err = service.New(service.Config{Root: *root, StateDir: *state, Policy: supply.DefaultPolicy, Form: form})
+		s, err = service.New(service.Config{Root: *root, StateDir: *state, Policy: supply.DefaultPolicy, Form: form, Sealed: sealed})
 		if err == nil {
 			break
 		}
@@ -98,6 +101,7 @@ func main() {
 		s.SetLid(false, false)
 	}
 	log.Print("serving org.freedesktop.UPower and the power profiles")
+	sealed.Log("ready")
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)

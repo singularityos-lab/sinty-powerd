@@ -320,6 +320,7 @@ func (s *Service) govern(onBattery bool, percentage float64) {
 	case batteryCritical(s.cfg.Policy, onBattery, percentage) && !s.criticalFired:
 		s.criticalFired = true
 		log.Printf("battery at %.0f%%, powering off", percentage)
+		s.cfg.Sealed.Log("battery-critical", uint64(percentage))
 		go s.powerOff()
 	case !onBattery:
 		s.criticalFired = false

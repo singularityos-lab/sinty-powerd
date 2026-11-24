@@ -6,6 +6,7 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/mirkobrombin/atomloops/sealedlog"
 	"log"
 	"os"
 	"path/filepath"
@@ -52,6 +53,7 @@ type Config struct {
 	StateDir string
 	Policy   supply.Policy
 	Form     policy.Form
+	Sealed   *sealedlog.Writer
 }
 
 type exported struct {
