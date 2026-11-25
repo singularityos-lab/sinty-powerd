@@ -15,7 +15,7 @@ func TestDecide(t *testing.T) {
 		want Settings
 	}{
 		{"balanced on mains", State{Profile: profiles.Balanced, BatteryAware: true, Form: Laptop},
-			Settings{Platform: profiles.Balanced, Bias: BiasBalancePerformance, Boost: true}},
+			Settings{Platform: profiles.Balanced, Bias: BiasBalancePerformance, Boost: true, RuntimePM: true, AudioSaving: true}},
 		{"balanced on battery", State{Profile: profiles.Balanced, OnBattery: true, BatteryAware: true, Form: Laptop},
 			Settings{Platform: profiles.Balanced, Bias: BiasBalancePower, Boost: true, RuntimePM: true, AudioSaving: true, WirelessSave: true}},
 		{"balanced on battery, not battery aware", State{Profile: profiles.Balanced, OnBattery: true, Form: Laptop},
@@ -31,7 +31,7 @@ func TestDecide(t *testing.T) {
 		{"phone", State{Profile: profiles.Balanced, OnBattery: true, BatteryAware: true, Form: Phone},
 			Settings{Platform: profiles.Balanced, Bias: BiasBalancePower, Boost: true, RuntimePM: true, AudioSaving: true, PackageWatts: 6, WirelessSave: true}},
 		{"desktop on mains keeps the radio fast", State{Profile: profiles.Balanced, Form: Desktop},
-			Settings{Platform: profiles.Balanced, Bias: BiasBalancePerformance, Boost: true}},
+			Settings{Platform: profiles.Balanced, Bias: BiasBalancePerformance, Boost: true, RuntimePM: true, AudioSaving: true}},
 		{"tv on mains", State{Profile: profiles.Balanced, Form: TV},
 			Settings{Platform: profiles.Balanced, Bias: BiasBalancePerformance, Boost: true, RuntimePM: true}},
 		{"phone in performance has no budget", State{Profile: profiles.Performance, Form: Phone},

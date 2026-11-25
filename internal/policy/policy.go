@@ -97,8 +97,8 @@ func Decide(s State) Settings {
 		if s.OnBattery && s.BatteryAware {
 			out.Bias = BiasBalancePower
 		}
-		out.RuntimePM = s.OnBattery
-		out.AudioSaving = s.OnBattery
+		out.RuntimePM = true
+		out.AudioSaving = s.OnBattery || s.Form == Laptop || s.Form == Desktop
 	}
 	if s.Profile != profiles.Performance && (s.Idle || s.Form == Headless) {
 		out.Bias = BiasPower
