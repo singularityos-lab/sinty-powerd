@@ -26,11 +26,19 @@ const (
 	usbAudio = "01"
 )
 
+const (
+	alpmSaving = "med_power_with_dipm"
+	alpmStock  = "max_performance"
+	aspmSaving = "powersupersave"
+	aspmPolicy = "sys/module/pcie_aspm/parameters/policy"
+)
+
 type Manager struct {
 	root     string
 	changed  map[string]string
 	held     string
 	heldOrig string
+	links    bool
 }
 
 func New(root string) *Manager {
@@ -208,11 +216,58 @@ func (m *Manager) Apply(runtimePM, audio, wakeOnRadio bool) {
 			wanted = runtimePM
 		case strings.HasSuffix(path, "power/wakeup"):
 			wanted = wakeOnRadio
+		case isLinkKnob(path):
+			wanted = m.links
 		}
 		if !wanted {
 			if os.WriteFile(path, []byte(orig), 0) == nil || read(path) == "" {
 				delete(m.changed, path)
 			}
+		}
+	}
+}
+
+func isLinkKnob(path string) bool {
+	return strings.HasSuffix(path, "link_power_management_policy") || strings.HasSuffix(path, aspmPolicy)
+}
+
+func selectedChoice(v string) string {
+	for _, f := range strings.Fields(v) {
+		if strings.HasPrefix(f, "[") && strings.HasSuffix(f, "]") {
+			return strings.Trim(f, "[]")
+		}
+	}
+	return v
+}
+
+func (m *Manager) ApplyLinks(saving bool) {
+	m.links = saving
+	if saving {
+		hosts, _ := filepath.Glob(filepath.Join(m.root, "sys/class/scsi_host/host*/link_power_management_policy"))
+		for _, p := range hosts {
+			if read(p) == alpmStock {
+				m.set(p, alpmSaving)
+			}
+		}
+		aspm := filepath.Join(m.root, aspmPolicy)
+		choices := read(aspm)
+		cur := selectedChoice(choices)
+		if cur == "" || cur == aspmSaving || !strings.Contains(choices, aspmSaving) {
+			return
+		}
+		if os.WriteFile(aspm, []byte(aspmSaving), 0) == nil {
+			if _, ok := m.changed[aspm]; !ok {
+				m.changed[aspm] = cur
+			}
+		}
+		return
+	}
+	for path, orig := range m.changed {
+		if !isLinkKnob(path) {
+			continue
+		}
+		if os.WriteFile(path, []byte(orig), 0) == nil || read(path) == "" {
+			delete(m.changed, path)
 		}
 	}
 }

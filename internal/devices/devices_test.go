@@ -179,3 +179,53 @@ func TestHeldPCIDeviceIsLeftOn(t *testing.T) {
 		t.Fatalf("held PCI encoder suspended: %s", got)
 	}
 }
+
+func TestLinksSaveAndComeBack(t *testing.T) {
+	root := t.TempDir()
+	put(t, root, "sys/class/scsi_host/host0/link_power_management_policy", "max_performance")
+	put(t, root, "sys/class/scsi_host/host1/link_power_management_policy", "min_power")
+	put(t, root, "sys/module/pcie_aspm/parameters/policy", "[default] performance powersave powersupersave")
+
+	m := New(root)
+	m.ApplyLinks(true)
+	if got := get(t, root, "sys/class/scsi_host/host0/link_power_management_policy"); got != "med_power_with_dipm" {
+		t.Errorf("stock SATA link not saving: %s", got)
+	}
+	if got := get(t, root, "sys/class/scsi_host/host1/link_power_management_policy"); got != "min_power" {
+		t.Errorf("a link policy someone chose was overridden: %s", got)
+	}
+	if got := get(t, root, "sys/module/pcie_aspm/parameters/policy"); got != "powersupersave" {
+		t.Errorf("ASPM not saving: %s", got)
+	}
+
+	m.Apply(true, true, false)
+	if got := get(t, root, "sys/module/pcie_aspm/parameters/policy"); got != "powersupersave" {
+		t.Errorf("device apply dropped link saving: %s", got)
+	}
+
+	m.ApplyLinks(false)
+	if got := get(t, root, "sys/class/scsi_host/host0/link_power_management_policy"); got != "max_performance" {
+		t.Errorf("SATA link not given back: %s", got)
+	}
+	if got := get(t, root, "sys/module/pcie_aspm/parameters/policy"); got != "default" {
+		t.Errorf("ASPM not given back: %s", got)
+	}
+
+	m.ApplyLinks(true)
+	m.Restore()
+	if got := get(t, root, "sys/module/pcie_aspm/parameters/policy"); got != "default" {
+		t.Errorf("ASPM not restored on exit: %s", got)
+	}
+}
+
+func TestSelectedChoice(t *testing.T) {
+	for in, want := range map[string]string{
+		"[default] performance powersave powersupersave": "default",
+		"default performance [powersave] powersupersave": "powersave",
+		"powersupersave": "powersupersave",
+	} {
+		if got := selectedChoice(in); got != want {
+			t.Errorf("selectedChoice(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

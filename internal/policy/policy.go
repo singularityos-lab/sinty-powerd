@@ -70,6 +70,7 @@ type Settings struct {
 	PackageWatts float64
 	WirelessSave bool
 	WakeOnRadio  bool
+	LinkSaving   bool
 }
 
 type Budget struct {
@@ -112,6 +113,8 @@ func Decide(s State) Settings {
 	if b, ok := Budgets[s.Form]; ok && s.Profile != profiles.Performance {
 		out.PackageWatts = b.PackageWatts
 	}
+	out.LinkSaving = s.Profile != profiles.Performance &&
+		(s.OnBattery || s.Profile == profiles.PowerSaver || s.Idle || s.Form == Phone || s.Form == Headless)
 	if s.Streaming && !s.Encoder && out.Bias == BiasPower {
 		out.Bias = BiasBalancePower
 	}

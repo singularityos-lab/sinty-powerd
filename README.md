@@ -64,8 +64,9 @@ desktop find the same names, objects and properties on the system bus.
   the kernel keeps always on are allowed to suspend on their own (input and
   audio USB devices, GPU drivers, `mei_me` and PCIe ports excepted), the
   HDA codec powers down when silent, dirty pages are written back every 15
-  seconds instead of 5 and the NMI watchdog is off; every value changed is
-  put back afterwards. NVIDIA GPUs and their audio function are always allowed to
+  seconds instead of 5, the NMI watchdog is off, SATA links still at
+  `max_performance` move to `med_power_with_dipm` and the PCIe ASPM policy
+  to `powersupersave`; every value changed is put back afterwards. NVIDIA GPUs and their audio function are always allowed to
   suspend, as the driver documentation asks, so an idle dedicated GPU turns
   off. Phones and headless machines also get a sustained package power
   budget. After a resume, and when a device is plugged in, the settings are
