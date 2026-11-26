@@ -3,55 +3,38 @@
 package events
 
 import (
-	"bytes"
+	"context"
 	"encoding/binary"
 	"os"
 	"path/filepath"
 	"syscall"
 	"unsafe"
+
+	"github.com/singularityos-lab/libsingularity/src/system/core/go/uevent"
 )
 
-// PowerSupplyChanges calls changed for every uevent of the power_supply
-// subsystem. It returns when the uevent socket cannot be opened.
-func PowerSupplyChanges(changed func()) error {
-	return uevents(func(ev []byte) bool {
-		return bytes.Contains(ev, []byte("\x00SUBSYSTEM=power_supply\x00"))
-	}, changed)
-}
-
-func DevicesAdded(added func()) error {
-	return uevents(func(ev []byte) bool {
-		return bytes.HasPrefix(ev, []byte("add@")) &&
-			(bytes.Contains(ev, []byte("\x00SUBSYSTEM=pci\x00")) ||
-				bytes.Contains(ev, []byte("\x00SUBSYSTEM=usb\x00")) && bytes.Contains(ev, []byte("\x00DEVTYPE=usb_device\x00")))
-	}, added)
-}
-
-func uevents(match func([]byte) bool, cb func()) error {
-	fd, err := syscall.Socket(syscall.AF_NETLINK, syscall.SOCK_DGRAM|syscall.SOCK_CLOEXEC, syscall.NETLINK_KOBJECT_UEVENT)
+// Watch calls supply for every power supply event and added when a PCI or
+// USB device appears. Other device events do not wake the daemon.
+func Watch(supply, added func()) error {
+	m, err := uevent.Open(
+		uevent.Match{Subsystem: "power_supply"},
+		uevent.Match{Subsystem: "pci"},
+		uevent.Match{Subsystem: "usb", DevType: "usb_device"},
+	)
 	if err != nil {
 		return err
 	}
-	if err := syscall.Bind(fd, &syscall.SockaddrNetlink{Family: syscall.AF_NETLINK, Groups: 1}); err != nil {
-		syscall.Close(fd)
-		return err
-	}
-	go func() {
-		defer syscall.Close(fd)
-		buf := make([]byte, 16384)
-		for {
-			n, _, err := syscall.Recvfrom(fd, buf, 0)
-			if err != nil {
-				if err == syscall.EINTR {
-					continue
-				}
-				return
-			}
-			if match(buf[:n]) {
-				cb()
-			}
+	go m.Run(context.Background(), func(ev uevent.Event, err error) {
+		switch {
+		case err != nil:
+			supply()
+			added()
+		case ev.Subsystem() == "power_supply":
+			supply()
+		case ev.Action() == "add":
+			added()
 		}
-	}()
+	})
 	return nil
 }
 

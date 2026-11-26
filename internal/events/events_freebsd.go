@@ -2,17 +2,12 @@ package events
 
 import "syscall"
 
-func PowerSupplyChanges(changed func()) error {
+func Watch(supply, added func()) error {
 	return devdWatch(DevdSocket, func(line string) {
-		if devdPowerSupply(line) {
-			changed()
-		}
-	})
-}
-
-func DevicesAdded(added func()) error {
-	return devdWatch(DevdSocket, func(line string) {
-		if devdDeviceAdded(line) {
+		switch {
+		case devdPowerSupply(line):
+			supply()
+		case devdDeviceAdded(line):
 			added()
 		}
 	})

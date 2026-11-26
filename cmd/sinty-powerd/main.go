@@ -79,22 +79,16 @@ func main() {
 	go s.WatchLogin()
 
 	refresh := make(chan struct{}, 1)
-	poke := func() {
-		select {
-		case refresh <- struct{}{}:
-		default:
-		}
-	}
-	if err := events.PowerSupplyChanges(poke); err != nil {
-		log.Printf("power supply events: %v", err)
-	}
 	added := make(chan struct{}, 1)
-	if err := events.DevicesAdded(func() {
-		select {
-		case added <- struct{}{}:
-		default:
+	nudge := func(ch chan struct{}) func() {
+		return func() {
+			select {
+			case ch <- struct{}{}:
+			default:
+			}
 		}
-	}); err != nil {
+	}
+	if err := events.Watch(nudge(refresh), nudge(added)); err != nil {
 		log.Printf("device events: %v", err)
 	}
 	if !events.Lid(func(closed bool) { s.SetLid(true, closed) }) {
@@ -115,14 +109,23 @@ func main() {
 	thermalTimer()
 	save := time.NewTicker(10 * time.Minute)
 	usageTick := time.NewTicker(service.UsageInterval)
+	var settled, attached <-chan time.Time
 	for {
 		select {
 		case <-refresh:
-			time.Sleep(200 * time.Millisecond)
+			if settled == nil {
+				settled = time.After(200 * time.Millisecond)
+			}
+		case <-settled:
+			settled = nil
 			syncKernel()
 			s.Refresh()
 		case <-added:
-			time.Sleep(time.Second)
+			if attached == nil {
+				attached = time.After(time.Second)
+			}
+		case <-attached:
+			attached = nil
 			s.DevicesAdded()
 		case <-poll.C:
 			syncKernel()
