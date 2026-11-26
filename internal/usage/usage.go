@@ -64,6 +64,7 @@ type proc struct {
 	gpu       uint64
 	cores     float64
 	busySince time.Time
+	at        time.Time
 	seen      bool
 }
 
@@ -75,10 +76,21 @@ type Tracker struct {
 	gpuScan time.Time
 	lastAt  time.Time
 	dirty   bool
+	clients map[int]*client
+	dirs    map[string][]member
+	watched map[string]time.Time
 }
 
 func New(root string) *Tracker {
-	return &Tracker{root: root, groups: map[string]*group{}, procs: map[int]*proc{}, gpuPids: map[int]bool{}}
+	return &Tracker{
+		root:    root,
+		groups:  map[string]*group{},
+		procs:   map[int]*proc{},
+		gpuPids: map[int]bool{},
+		clients: map[int]*client{},
+		dirs:    map[string][]member{},
+		watched: map[string]time.Time{},
+	}
 }
 
 func read(path string) string {
@@ -209,6 +221,17 @@ func (t *Tracker) Sample(now time.Time) {
 	if !t.lastAt.IsZero() {
 		elapsed = now.Sub(t.lastAt).Seconds()
 	}
+	var impact map[string]float64
+	if t.cgroups() {
+		impact = t.sampleCgroups(now, elapsed)
+	} else {
+		impact = t.sampleProcs(now, elapsed)
+	}
+	t.account(now, elapsed, impact)
+	t.lastAt = now
+}
+
+func (t *Tracker) sampleProcs(now time.Time, elapsed float64) map[string]float64 {
 	rescanGPU := now.Sub(t.gpuScan) >= gpuRescan
 	if rescanGPU {
 		t.gpuScan = now
@@ -300,6 +323,10 @@ func (t *Tracker) Sample(now time.Time) {
 		}
 	}
 
+	return impact
+}
+
+func (t *Tracker) account(now time.Time, elapsed float64, impact map[string]float64) {
 	if elapsed > 0 {
 		keep := now.Add(-averageWindow).Unix() / int64(bucketSpan.Seconds())
 		bucket := now.Unix() / int64(bucketSpan.Seconds())
@@ -329,7 +356,6 @@ func (t *Tracker) Sample(now time.Time) {
 			}
 		}
 	}
-	t.lastAt = now
 }
 
 func (t *Tracker) Apps() []App {
@@ -373,6 +399,9 @@ func (t *Tracker) Hot(now time.Time) []Hot {
 }
 
 func (t *Tracker) Processes(app string) []Process {
+	if t.cgroups() {
+		t.watch(app)
+	}
 	var out []Process
 	for pid, p := range t.procs {
 		if p.app == app {
