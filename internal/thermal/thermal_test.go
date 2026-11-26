@@ -25,7 +25,7 @@ func TestGuardThrottlesAndRecovers(t *testing.T) {
 	put(t, root, "sys/class/thermal/thermal_zone1/temp", "60000")
 	put(t, root, "sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw", "28000000")
 	g := Detect(root)
-	if g == nil || g.Target() != 90000 || len(g.temps) != 1 || g.temps[0] != filepath.Join(root, "sys/class/thermal/thermal_zone1/temp") {
+	if g == nil || g.Target() != 90000 || len(g.temps) != 1 || g.temps[0].path != filepath.Join(root, "sys/class/thermal/thermal_zone1/temp") {
 		t.Fatalf("guard %+v", g)
 	}
 	limit := func() int {

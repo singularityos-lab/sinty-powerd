@@ -260,10 +260,21 @@ func (s *Service) ThermalInterval() time.Duration {
 	if s.guard == nil {
 		return 0
 	}
-	if s.degraded != "" || s.guard.Temperature() >= s.guard.Target()-10000 {
+	if s.degraded != "" || s.guard.Temperature() >= s.guard.Near() {
 		return 2 * time.Second
 	}
+	if s.guard.Watched() {
+		return 0
+	}
 	return 10 * time.Second
+}
+
+// WatchThermal wakes the thermal guard only when the processor warms past
+// its watch point, where the hardware can raise that event.
+func (s *Service) WatchThermal(warm func()) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.guard != nil && s.guard.Watch(warm)
 }
 
 func (s *Service) PollInterval() time.Duration {

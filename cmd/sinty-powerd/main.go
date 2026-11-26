@@ -101,11 +101,16 @@ func main() {
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
 	poll := time.NewTimer(s.PollInterval())
 	var thermal <-chan time.Time
+	warm := make(chan struct{}, 1)
 	thermalTimer := func() {
+		thermal = nil
 		if d := s.ThermalInterval(); d > 0 {
 			thermal = time.After(d)
 		}
 	}
+	syncKernel()
+	s.ThermalStep()
+	s.WatchThermal(nudge(warm))
 	thermalTimer()
 	save := time.NewTicker(10 * time.Minute)
 	usageTick := time.NewTicker(service.UsageInterval)
@@ -131,6 +136,10 @@ func main() {
 			syncKernel()
 			s.Refresh()
 			poll.Reset(s.PollInterval())
+		case <-warm:
+			if thermal == nil {
+				thermal = time.After(0)
+			}
 		case <-thermal:
 			syncKernel()
 			s.ThermalStep()

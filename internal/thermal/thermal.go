@@ -6,6 +6,7 @@
 package thermal
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -14,7 +15,9 @@ import (
 
 // Guard watches one temperature and steers one power limit.
 type Guard struct {
-	temps      []string
+	temps      []*sensor
+	zone       string
+	trip       *Trip
 	knobs      []knob
 	original   uint64
 	current    uint64
@@ -28,6 +31,30 @@ type Guard struct {
 type knob struct {
 	path     string
 	original uint64
+}
+
+type sensor struct {
+	path string
+	f    *os.File
+	buf  [32]byte
+}
+
+func (s *sensor) read() (int64, bool) {
+	if s.f == nil {
+		f, err := os.Open(s.path)
+		if err != nil {
+			return 0, false
+		}
+		s.f = f
+	}
+	n, err := s.f.ReadAt(s.buf[:], 0)
+	if n == 0 && err != nil {
+		s.f.Close()
+		s.f = nil
+		return 0, false
+	}
+	v, err := strconv.ParseInt(strings.TrimSpace(string(s.buf[:n])), 10, 64)
+	return v, err == nil
 }
 
 func readInt(path string) (int64, bool) {
@@ -44,7 +71,7 @@ func readInt(path string) (int64, bool) {
 // missing: there is then nothing to steer.
 func Detect(root string) *Guard {
 	zones, _ := filepath.Glob(filepath.Join(root, "sys/class/thermal/thermal_zone*"))
-	var temp string
+	var temp, zone string
 	critical := int64(0)
 	for _, pref := range []string{"x86_pkg_temp", "TCPU", "acpitz"} {
 		for _, z := range zones {
@@ -53,7 +80,7 @@ func Detect(root string) *Guard {
 				continue
 			}
 			if temp == "" {
-				temp = filepath.Join(z, "temp")
+				temp, zone = filepath.Join(z, "temp"), z
 			}
 		}
 	}
@@ -69,12 +96,16 @@ func Detect(root string) *Guard {
 			}
 		}
 	}
-	temps := []string{temp}
+	paths := []string{temp}
 	if temp == "" {
-		temps = socZones(zones)
+		paths = socZones(zones)
 	}
-	if len(temps) == 0 {
+	if len(paths) == 0 {
 		return nil
+	}
+	temps := make([]*sensor, len(paths))
+	for i, p := range paths {
+		temps[i] = &sensor{path: p}
 	}
 	knobs, kind := limits(root)
 	if len(knobs) == 0 {
@@ -86,6 +117,7 @@ func Detect(root string) *Guard {
 	}
 	return &Guard{
 		temps:      temps,
+		zone:       zone,
 		knobs:      knobs,
 		kind:       kind,
 		original:   1000,
@@ -115,7 +147,7 @@ func (g *Guard) hottest() (int64, bool) {
 	var best int64
 	found := false
 	for _, p := range g.temps {
-		if t, ok := readInt(p); ok && (!found || t > best) {
+		if t, ok := p.read(); ok && (!found || t > best) {
 			best, found = t, true
 		}
 	}
@@ -179,6 +211,29 @@ func (g *Guard) Reapply() {
 // Target is the temperature, in millidegrees, the guard keeps below.
 func (g *Guard) Target() int64 { return g.target }
 
+// Near is the temperature from which the guard reads the sensor every few
+// seconds instead of waiting.
+func (g *Guard) Near() int64 { return g.target - 10000 }
+
+// Watch moves a free trip point of the package zone to Near and calls warm
+// whenever the temperature crosses it, so nothing polls while the processor
+// is cool. It reports false when the zone offers no such trip point.
+func (g *Guard) Watch(warm func()) bool {
+	if g.zone == "" || g.trip != nil {
+		return g.trip != nil
+	}
+	t, err := ArmTrip(g.zone, g.Near())
+	if err != nil {
+		return false
+	}
+	g.trip = t
+	go t.Run(context.Background(), warm)
+	return true
+}
+
+// Watched reports whether a trip point wakes the guard.
+func (g *Guard) Watched() bool { return g.trip != nil }
+
 // Step reads the temperature once and adjusts the limit. It reports whether
 // the processor currently runs below its full power.
 func (g *Guard) Step() bool {
@@ -205,6 +260,9 @@ func (g *Guard) Restore() {
 	if g.write(1000) {
 		g.current = 1000
 		g.original = 1000
+	}
+	if g.trip != nil {
+		g.trip.Restore()
 	}
 }
 
