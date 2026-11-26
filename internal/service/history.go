@@ -18,6 +18,7 @@ type sample struct {
 // history keeps the four series UPower records for a battery.
 type history struct {
 	Series map[string][]sample `json:"series"`
+	dirty  bool
 }
 
 const maxSamples = 4096
@@ -38,6 +39,7 @@ func (h *history) add(kind string, t uint32, v float64, state uint32) {
 		return
 	}
 	s = append(s, sample{t, v, state})
+	h.dirty = true
 	if len(s) > maxSamples {
 		s = s[len(s)-maxSamples:]
 	}
@@ -84,6 +86,9 @@ func loadHistory(path string) *history {
 }
 
 func (h *history) save(path string) error {
+	if !h.dirty {
+		return nil
+	}
 	data, err := json.Marshal(h)
 	if err != nil {
 		return err
@@ -95,5 +100,9 @@ func (h *history) save(path string) error {
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	if err := os.Rename(tmp, path); err != nil {
+		return err
+	}
+	h.dirty = false
+	return nil
 }

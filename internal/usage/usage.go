@@ -74,6 +74,7 @@ type Tracker struct {
 	gpuPids map[int]bool
 	gpuScan time.Time
 	lastAt  time.Time
+	dirty   bool
 }
 
 func New(root string) *Tracker {
@@ -315,10 +316,12 @@ func (t *Tracker) Sample(now time.Time) {
 			g.recent += (g.now - g.recent) * weight
 			if g.now > 0 {
 				g.buckets[bucket] += g.now * elapsed
+				t.dirty = true
 			}
 			for b := range g.buckets {
 				if b <= keep {
 					delete(g.buckets, b)
+					t.dirty = true
 				}
 			}
 			if len(g.buckets) == 0 && g.recent < 0.01 {
@@ -390,6 +393,9 @@ type saved struct {
 }
 
 func (t *Tracker) Save(path string) error {
+	if !t.dirty {
+		return nil
+	}
 	s := saved{Buckets: map[string]map[int64]float64{}}
 	for key, g := range t.groups {
 		if id, ok := strings.CutPrefix(key, "app:"); ok && len(g.buckets) > 0 {
@@ -407,7 +413,11 @@ func (t *Tracker) Save(path string) error {
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	if err := os.Rename(tmp, path); err != nil {
+		return err
+	}
+	t.dirty = false
+	return nil
 }
 
 func (t *Tracker) Load(path string, now time.Time) {

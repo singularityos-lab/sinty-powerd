@@ -1,6 +1,7 @@
 package service
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -32,5 +33,19 @@ func TestHistoryKeepsChangesNewestFirst(t *testing.T) {
 	}
 	if got := loadHistory(path).get("charge", 0, 0, now); len(got) != 10 {
 		t.Errorf("reloaded %d samples", len(got))
+	}
+	os.Remove(path)
+	if err := h.save(path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); err == nil {
+		t.Fatal("an unchanged history was written again")
+	}
+	h.add("charge", 1000, 91, 1)
+	if err := h.save(path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("a new sample was not saved: %v", err)
 	}
 }

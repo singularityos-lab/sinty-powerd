@@ -291,6 +291,9 @@ func (s *Service) unexportDevice(id string) {
 }
 
 func update(e *exported, d *supply.Device) {
+	if *e.dev == *d {
+		return
+	}
 	old := deviceProps(e.dev)
 	for k, v := range deviceProps(d) {
 		if old[k] != v {

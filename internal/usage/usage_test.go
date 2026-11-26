@@ -176,6 +176,17 @@ func TestTwelveHourAverageSurvivesRestart(t *testing.T) {
 	if err := tr.Save(path); err != nil {
 		t.Fatal(err)
 	}
+	os.Remove(path)
+	if err := tr.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); err == nil {
+		t.Fatal("unchanged usage was written again")
+	}
+	tr.dirty = true
+	if err := tr.Save(path); err != nil {
+		t.Fatal(err)
+	}
 	again := New(root)
 	again.Load(path, start.Add(2*time.Hour))
 	a := again.Apps()
