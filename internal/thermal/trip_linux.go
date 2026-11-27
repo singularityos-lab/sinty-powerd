@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/singularityos-lab/libsingularity/src/system/core/go/kernfs"
 )
 
 const (
@@ -43,7 +45,7 @@ func ArmTrip(zoneDir string, at int64) (*Trip, error) {
 	if path == "" {
 		return nil, errors.New("no writable trip point")
 	}
-	saved, err := os.ReadFile(path)
+	saved, err := kernfs.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +67,7 @@ func writableTrip(zoneDir string) string {
 	}
 	types, _ := filepath.Glob(filepath.Join(zoneDir, "trip_point_*_type"))
 	for _, p := range types {
-		kind, err := os.ReadFile(p)
+		kind, err := kernfs.ReadFile(p)
 		if err != nil || strings.TrimSpace(string(kind)) != "passive" {
 			continue
 		}

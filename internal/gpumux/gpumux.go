@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/singularityos-lab/libsingularity/src/system/core/go/kernfs"
 )
 
 const (
@@ -26,7 +28,7 @@ type Mux struct {
 }
 
 func read(path string) string {
-	data, err := os.ReadFile(path)
+	data, err := kernfs.ReadFile(path)
 	if err != nil {
 		return ""
 	}

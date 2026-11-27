@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/singularityos-lab/libsingularity/src/system/core/go/kernfs"
 )
 
 // Kinds, as UPower numbers them.
@@ -95,7 +97,7 @@ type attrs struct {
 
 func readAttrs(dir string) attrs {
 	a := attrs{dir: dir, vals: map[string]string{}}
-	data, err := os.ReadFile(filepath.Join(dir, "uevent"))
+	data, err := kernfs.ReadFile(filepath.Join(dir, "uevent"))
 	if err != nil {
 		return a
 	}
@@ -111,7 +113,7 @@ func (a attrs) str(key string) string {
 	if v, ok := a.vals[key]; ok {
 		return v
 	}
-	data, err := os.ReadFile(filepath.Join(a.dir, strings.ToLower(key)))
+	data, err := kernfs.ReadFile(filepath.Join(a.dir, strings.ToLower(key)))
 	if err != nil {
 		return ""
 	}

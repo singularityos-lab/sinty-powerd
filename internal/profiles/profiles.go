@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/singularityos-lab/libsingularity/src/system/core/go/kernfs"
 )
 
 const (
@@ -36,7 +38,7 @@ type Backend struct {
 func (b *Backend) path(p string) string { return filepath.Join(b.root, p) }
 
 func read(path string) string {
-	data, err := os.ReadFile(path)
+	data, err := kernfs.ReadFile(path)
 	if err != nil {
 		return ""
 	}

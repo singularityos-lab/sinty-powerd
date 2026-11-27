@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/singularityos-lab/libsingularity/src/system/core/go/kernfs"
 )
 
 // Guard watches one temperature and steers one power limit.
@@ -58,7 +60,7 @@ func (s *sensor) read() (int64, bool) {
 }
 
 func readInt(path string) (int64, bool) {
-	data, err := os.ReadFile(path)
+	data, err := kernfs.ReadFile(path)
 	if err != nil {
 		return 0, false
 	}
@@ -75,7 +77,7 @@ func Detect(root string) *Guard {
 	critical := int64(0)
 	for _, pref := range []string{"x86_pkg_temp", "TCPU", "acpitz"} {
 		for _, z := range zones {
-			data, _ := os.ReadFile(filepath.Join(z, "type"))
+			data, _ := kernfs.ReadFile(filepath.Join(z, "type"))
 			if strings.TrimSpace(string(data)) != pref {
 				continue
 			}
@@ -87,7 +89,7 @@ func Detect(root string) *Guard {
 	for _, z := range zones {
 		trips, _ := filepath.Glob(filepath.Join(z, "trip_point_*_type"))
 		for _, t := range trips {
-			data, _ := os.ReadFile(t)
+			data, _ := kernfs.ReadFile(t)
 			if strings.TrimSpace(string(data)) != "critical" {
 				continue
 			}
@@ -131,7 +133,7 @@ func Detect(root string) *Guard {
 func socZones(zones []string) []string {
 	var out []string
 	for _, z := range zones {
-		data, _ := os.ReadFile(filepath.Join(z, "type"))
+		data, _ := kernfs.ReadFile(filepath.Join(z, "type"))
 		kind := strings.ToLower(strings.TrimSpace(string(data)))
 		if strings.Contains(kind, "gpu") || strings.Contains(kind, "battery") || strings.Contains(kind, "pmic") {
 			continue

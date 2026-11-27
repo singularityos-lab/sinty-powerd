@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/singularityos-lab/libsingularity/src/system/core/go/kernfs"
 )
 
 type Entry struct {
@@ -118,7 +120,7 @@ func (s *Store) Restore(root string) int {
 			continue
 		}
 		connector := filepath.Base(target)
-		edid, err := os.ReadFile(filepath.Join(root, "sys/class/drm", connector, "edid"))
+		edid, err := kernfs.ReadFile(filepath.Join(root, "sys/class/drm", connector, "edid"))
 		key := EdidID(edid)
 		if err != nil || key == "" {
 			if i := strings.Index(connector, "-"); i > 0 {
@@ -129,7 +131,7 @@ func (s *Store) Restore(root string) int {
 		if !ok || e.Method != "backlight" {
 			continue
 		}
-		maxData, err := os.ReadFile(filepath.Join(light, "max_brightness"))
+		maxData, err := kernfs.ReadFile(filepath.Join(light, "max_brightness"))
 		if err != nil {
 			continue
 		}

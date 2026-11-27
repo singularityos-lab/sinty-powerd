@@ -10,6 +10,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/singularityos-lab/libsingularity/src/system/core/go/kernfs"
 )
 
 var skipDrivers = []string{"nvidia", "nouveau", "radeon", "amdgpu", "mei_me", "pcieport"}
@@ -47,7 +49,7 @@ func New(root string) *Manager {
 }
 
 func read(path string) string {
-	data, err := os.ReadFile(path)
+	data, err := kernfs.ReadFile(path)
 	if err != nil {
 		return ""
 	}

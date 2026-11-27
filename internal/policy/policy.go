@@ -5,11 +5,12 @@
 package policy
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/singularityos-lab/sinty-powerd/internal/profiles"
+
+	"github.com/singularityos-lab/libsingularity/src/system/core/go/kernfs"
 )
 
 type Form string
@@ -31,7 +32,7 @@ func ParseForm(s string) (Form, bool) {
 }
 
 func DetectForm(root string) Form {
-	data, _ := os.ReadFile(filepath.Join(root, "sys/class/dmi/id/chassis_type"))
+	data, _ := kernfs.ReadFile(filepath.Join(root, "sys/class/dmi/id/chassis_type"))
 	switch strings.TrimSpace(string(data)) {
 	case "8", "9", "10", "11", "14", "30", "31", "32":
 		return Laptop

@@ -4,11 +4,12 @@
 package energy
 
 import (
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/singularityos-lab/libsingularity/src/system/core/go/kernfs"
 )
 
 type Meter struct {
@@ -22,7 +23,7 @@ type Meter struct {
 }
 
 func readUint(path string) (uint64, bool) {
-	data, err := os.ReadFile(path)
+	data, err := kernfs.ReadFile(path)
 	if err != nil {
 		return 0, false
 	}

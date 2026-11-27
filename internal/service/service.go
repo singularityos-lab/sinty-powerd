@@ -4,6 +4,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/mirkobrombin/atomloops/sealedlog"
@@ -18,6 +19,8 @@ import (
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
 	"github.com/godbus/dbus/v5/prop"
+
+	"github.com/singularityos-lab/libsingularity/src/system/core/go/busname"
 
 	"github.com/singularityos-lab/sinty-powerd/internal/brightness"
 	"github.com/singularityos-lab/sinty-powerd/internal/devices"
@@ -139,16 +142,9 @@ func New(cfg Config) (*Service, error) {
 		conn.Close()
 		return nil, err
 	}
-	for _, name := range []string{upowerName, ppdEndpoints[0].name, ppdEndpoints[1].name, powerName, brightnessName} {
-		reply, err := conn.RequestName(name, dbus.NameFlagReplaceExisting|dbus.NameFlagDoNotQueue)
-		if err != nil {
-			conn.Close()
-			return nil, err
-		}
-		if reply != dbus.RequestNameReplyPrimaryOwner {
-			conn.Close()
-			return nil, fmt.Errorf("%s is owned by another process", name)
-		}
+	if err := busname.Own(context.Background(), conn, upowerName, ppdEndpoints[0].name, ppdEndpoints[1].name, powerName, brightnessName); err != nil {
+		conn.Close()
+		return nil, err
 	}
 	return s, nil
 }
