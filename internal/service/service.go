@@ -99,6 +99,7 @@ type Service struct {
 	history    map[string]*history
 	threshold  map[string]bool
 	lidPresent bool
+	jackIn     bool
 	lidClosed  bool
 
 	onBattery    bool
@@ -355,6 +356,18 @@ func (s *Service) SetLid(present, closed bool) {
 	defer s.mu.Unlock()
 	s.setManager("LidIsPresent", present)
 	s.setManager("LidIsClosed", closed)
+}
+
+func (s *Service) SetAnalogJack(plugged bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.jackIn == plugged {
+		return
+	}
+	s.jackIn = plugged
+	log.Printf("analog output jack plugged: %v", plugged)
+	s.devs.KeepAudioAwake(plugged)
+	s.devs.Apply(s.settings.RuntimePM, s.settings.AudioSaving, s.settings.WakeOnRadio)
 }
 
 // SaveHistory writes the battery history to the state directory.

@@ -229,3 +229,35 @@ func TestSelectedChoice(t *testing.T) {
 		}
 	}
 }
+
+func TestAudioStaysAwakeWithAJackPlugged(t *testing.T) {
+	root := t.TempDir()
+	const knob = "sys/module/snd_hda_intel/parameters/power_save"
+	put(t, root, knob, "1")
+
+	m := New(root)
+	m.Apply(false, true, false)
+	if got := get(t, root, knob); got != "1" {
+		t.Fatalf("saving before a jack: %s", got)
+	}
+	m.KeepAudioAwake(true)
+	m.Apply(false, true, false)
+	if got := get(t, root, knob); got != "0" {
+		t.Errorf("codec allowed to sleep with a jack plugged: %s", got)
+	}
+	m.Apply(true, true, false)
+	if got := get(t, root, knob); got != "0" {
+		t.Errorf("a later profile change put the codec to sleep: %s", got)
+	}
+	m.KeepAudioAwake(false)
+	m.Apply(false, true, false)
+	if got := get(t, root, knob); got != "1" {
+		t.Errorf("saving not back after the jack left: %s", got)
+	}
+	m.KeepAudioAwake(true)
+	m.Apply(false, true, false)
+	m.Restore()
+	if got := get(t, root, knob); got != "1" {
+		t.Errorf("restore did not give back the kernel value: %s", got)
+	}
+}

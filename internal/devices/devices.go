@@ -39,6 +39,7 @@ type Manager struct {
 	held     string
 	heldOrig string
 	links    bool
+	awake    bool
 }
 
 func New(root string) *Manager {
@@ -197,11 +198,12 @@ func (m *Manager) Apply(runtimePM, audio, wakeOnRadio bool) {
 			m.set(filepath.Join(m.root, p), v)
 		}
 	}
-	if audio {
-		for _, p := range m.audioKnobs() {
-			if read(p) == "0" {
-				m.set(p, "1")
-			}
+	for _, p := range m.audioKnobs() {
+		switch {
+		case m.awake:
+			m.set(p, "0")
+		case audio && read(p) == "0":
+			m.set(p, "1")
 		}
 	}
 	if wakeOnRadio {
@@ -210,7 +212,7 @@ func (m *Manager) Apply(runtimePM, audio, wakeOnRadio bool) {
 		}
 	}
 	for path, orig := range m.changed {
-		wanted := audio
+		wanted := audio || m.awake
 		switch {
 		case strings.HasSuffix(path, "power/control"), strings.HasPrefix(path, filepath.Join(m.root, "proc/sys")):
 			wanted = runtimePM
@@ -225,6 +227,10 @@ func (m *Manager) Apply(runtimePM, audio, wakeOnRadio bool) {
 			}
 		}
 	}
+}
+
+func (m *Manager) KeepAudioAwake(awake bool) {
+	m.awake = awake
 }
 
 func isLinkKnob(path string) bool {

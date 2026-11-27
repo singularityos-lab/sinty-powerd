@@ -94,6 +94,7 @@ func main() {
 	if !events.Lid(func(closed bool) { s.SetLid(true, closed) }) {
 		s.SetLid(false, false)
 	}
+	events.AnalogJacks(s.SetAnalogJack)
 	log.Print("serving org.freedesktop.UPower and the power profiles")
 	sealed.Log("ready")
 

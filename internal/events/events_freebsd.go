@@ -24,3 +24,5 @@ func Lid(changed func(closed bool)) bool {
 		}
 	}) == nil
 }
+
+func AnalogJacks(changed func(plugged bool)) {}
